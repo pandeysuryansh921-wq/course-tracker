@@ -1,4 +1,6 @@
-# 🎓 DegreeTrack & Quiz
+# 🎓 DegreeTrack & Quiz (Under Development)
+
+> ⚠️ **Note:** This application is currently **under development**. You can download the latest Android APK for testing here: [Download APK](./apk/degreetrack-quiz-debug.apk).
 
 A privacy-focused, local-first web application that helps self-learners structure their online degree curriculum, track study progress, and manage assignments and self-assessment scores.
 
