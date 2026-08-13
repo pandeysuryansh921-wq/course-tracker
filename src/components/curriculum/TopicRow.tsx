@@ -215,14 +215,14 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   return (
     <div className={`border-b border-slate-200 dark:border-slate-800 last:border-0 transition-all ${(isLocked && !isEditMode) ? 'opacity-50 select-none grayscale bg-slate-50/50 dark:bg-slate-900/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
       <div 
-        className={`flex items-center p-4 gap-4 ${(isLocked && !isEditMode) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`flex flex-col sm:flex-row sm:items-center p-4 gap-4 ${(isLocked && !isEditMode) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         onClick={() => { if (!(isLocked && !isEditMode)) setIsExpanded(!isExpanded); }}
       >
-        <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" disabled={isLocked && !isEditMode}>
-          {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-        </button>
-        
-        <div className="flex-1 flex items-center gap-3">
+        <div className="flex-1 flex flex-wrap items-center gap-3">
+          <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 mr-1" disabled={isLocked && !isEditMode}>
+            {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+          </button>
+          
           <input 
             type="checkbox" 
             checked={topic.isCompleted} 
@@ -232,22 +232,22 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
             className="w-5 h-5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer disabled:cursor-not-allowed shrink-0"
           />
           {topic.isMastered ? (
-            <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/20">Mastered 🌟</Badge>
+            <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/20 shrink-0">Mastered 🌟</Badge>
           ) : topic.isCompleted ? (
-            <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/20">Completed ✅</Badge>
+            <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/20 shrink-0">Completed ✅</Badge>
           ) : topic.status === 'needs-review' ? (
-            <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/20">Needs Review 🔄</Badge>
+            <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/20 shrink-0">Needs Review 🔄</Badge>
           ) : (
-            <Badge className={getStatusBg(topic.status)}>{getStatusLabel(topic.status)}</Badge>
+            <Badge className={`${getStatusBg(topic.status)} shrink-0`}>{getStatusLabel(topic.status)}</Badge>
           )}
           <span className="font-medium text-slate-900 dark:text-white flex items-center gap-2">
-            {(isLocked && !isEditMode) && <Lock className="w-4 h-4 text-slate-400" />}
+            {(isLocked && !isEditMode) && <Lock className="w-4 h-4 text-slate-400 shrink-0" />}
             {topic.name}
           </span>
         </div>
         
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-500 dark:text-slate-400">{resources.length} resources</span>
+        <div className="flex flex-wrap items-center gap-4 sm:justify-end ml-10 sm:ml-0">
+          <span className="text-sm text-slate-500 dark:text-slate-400 shrink-0">{resources.length} resources</span>
           {isEditMode && (
             <>
               <select 
@@ -353,7 +353,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
 
           {/* Assignments Section */}
           <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-row flex-wrap items-center justify-between gap-2 mb-3">
               <h4 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 Assignments
               </h4>
@@ -535,7 +535,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
               />
             )}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-row flex-wrap items-center justify-between gap-2 mb-3">
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Resources</h4>
                 {isEditMode && (
                   <Button variant="secondary" size="sm" onClick={() => setIsAddingResource(true)}>

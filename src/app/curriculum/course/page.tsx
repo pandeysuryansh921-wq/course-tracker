@@ -141,8 +141,8 @@ function CourseDetailsContent() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-row flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="flex flex-row flex-wrap items-center gap-2">
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
             Course Modules
           </h2>
