@@ -120,7 +120,7 @@ export default function PerformanceChart({ courses, selectedCourseId = 'all' }: 
                 borderRadius: '0.5rem',
               }}
               formatter={(value: any) => [`${value}%`, 'Score']}
-              labelFormatter={(label: any, payload: any[]) => {
+              labelFormatter={(label: any, payload: readonly any[]) => {
                 if (payload && payload.length > 0) {
                   return payload[0].payload.fullName;
                 }
