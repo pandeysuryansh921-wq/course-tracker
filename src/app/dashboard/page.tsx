@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react'
 import { ProgressRing } from '@/components/dashboard/ProgressRing'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { useCurriculumStore } from '@/stores/useCurriculumStore'
+import { useTimerStore } from '@/stores/useTimerStore'
 import { BookOpen, CheckCircle, Flame, Calendar, Play, Plus, Clock } from 'lucide-react'
 import Link from 'next/link'
 
 export default function DashboardPage() {
   const { courses, topics, updateCourse, modules } = useCurriculumStore()
+  const sessions = useTimerStore(state => state.sessions)
   const [selectedCourseId, setSelectedCourseId] = useState<string>('')
 
   // Set first course as default when courses load
@@ -25,6 +27,46 @@ export default function DashboardPage() {
   const completedTopics = courseTopics.filter(t => t.isCompleted).length
   const overallProgress = courseTopics.length > 0 ? Math.round((completedTopics / courseTopics.length) * 100) : 0
   const dueForReview = courseTopics.filter(t => t.status === 'needs-review').slice(0, 5)
+
+  // Calculate Streak
+  let studyStreak = 0;
+  if (sessions.length > 0) {
+    const dates = sessions
+      .map(s => new Date(s.startedAt).toISOString().split('T')[0])
+      .filter((value, index, self) => self.indexOf(value) === index)
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+    
+    let currentDate = new Date(todayStr);
+    
+    if (dates.includes(todayStr)) {
+      studyStreak = 1;
+      let checkDate = new Date(todayStr);
+      for (let i = 1; i < dates.length; i++) {
+        checkDate.setDate(checkDate.getDate() - 1);
+        if (dates.includes(checkDate.toISOString().split('T')[0])) {
+          studyStreak++;
+        } else {
+          break;
+        }
+      }
+    } else if (dates.includes(yesterdayStr)) {
+      studyStreak = 1;
+      let checkDate = new Date(yesterdayStr);
+      for (let i = 1; i < dates.length; i++) {
+        checkDate.setDate(checkDate.getDate() - 1);
+        if (dates.includes(checkDate.toISOString().split('T')[0])) {
+          studyStreak++;
+        } else {
+          break;
+        }
+      }
+    }
+  }
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (activeCourse) {
@@ -103,7 +145,7 @@ export default function DashboardPage() {
           />
           <StatsCard
             title="Study Streak"
-            value="3"
+            value={studyStreak.toString()}
             subtitle="Days"
             icon={Flame}
             color="orange"
@@ -147,7 +189,7 @@ export default function DashboardPage() {
                     <div className="h-2 w-2 rounded-full bg-orange-500"></div>
                     <span className="font-medium text-slate-700 dark:text-slate-300">{topic.name}</span>
                   </div>
-                  <Link href={`/curriculum?courseId=${selectedCourseId}`} className="text-sm font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400">
+                  <Link href={`/curriculum/course?id=${selectedCourseId}`} className="text-sm font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400">
                     Review
                   </Link>
                 </div>

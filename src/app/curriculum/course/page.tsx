@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, use, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import AddModuleModal from '@/components/curriculum/AddModuleModal';
@@ -10,13 +10,14 @@ import ModuleAccordion from '@/components/curriculum/ModuleAccordion';
 import GeminiGemCard from '@/components/curriculum/GeminiGemCard';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { ArrowLeft, Plus, Edit2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, CheckCircle2, Loader2 } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import { Suspense } from 'react';
 
-export default function CourseDetailsPage({ params }: { params: Promise<{ courseId: string }> }) {
+function CourseDetailsContent() {
   const router = useRouter();
-  const resolvedParams = use(params);
-  const courseId = resolvedParams.courseId;
+  const searchParams = useSearchParams();
+  const courseId = searchParams.get('id');
 
   const [isAddModuleModalOpen, setIsAddModuleModalOpen] = useState(false);
   const [isAddTopicModalOpen, setIsAddTopicModalOpen] = useState(false);
@@ -221,5 +222,17 @@ export default function CourseDetailsPage({ params }: { params: Promise<{ course
         moduleId={selectedModuleId}
       />
     </div>
+  );
+}
+
+export default function CourseDetailsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+      </div>
+    }>
+      <CourseDetailsContent />
+    </Suspense>
   );
 }

@@ -27,7 +27,7 @@ export default function CourseCard({ course, progress, moduleCount, topicCount }
   };
 
   return (
-    <Link href={`/curriculum/${course.id}`} className="block">
+    <Link href={`/curriculum/course?id=${course.id}`} className="block">
       <div 
         className="relative p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200 overflow-hidden group"
         style={{ borderTop: `4px solid ${course.color || '#8b5cf6'}` }}
