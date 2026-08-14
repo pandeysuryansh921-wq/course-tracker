@@ -141,24 +141,27 @@ function CourseDetailsContent() {
         </div>
       )}
 
-      <div className="flex flex-row flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="flex flex-row flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-4">
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
             Course Modules
           </h2>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button 
             variant={isEditMode ? "primary" : "secondary"}
             size="sm"
             onClick={() => setIsEditMode(!isEditMode)}
+            className="w-full sm:w-auto"
           >
             {isEditMode ? <><CheckCircle2 className="w-4 h-4 mr-2" /> Done Editing</> : <><Edit2 className="w-4 h-4 mr-2" /> Edit Course</>}
           </Button>
+          {isEditMode && (
+            <Button onClick={() => setIsAddModuleModalOpen(true)} size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
+              <Plus className="w-4 h-4 mr-2" /> Add Module
+            </Button>
+          )}
         </div>
-        {isEditMode && (
-          <Button onClick={() => setIsAddModuleModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" /> Add Module
-          </Button>
-        )}
       </div>
 
       {modules.length === 0 ? (

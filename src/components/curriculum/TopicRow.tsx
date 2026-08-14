@@ -287,8 +287,8 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
             </h4>
             
             {isEditMode ? (
-              <div className="flex gap-4">
-                <div className="flex-1 space-y-2">
+              <div className="flex flex-col gap-4">
+                <div className="space-y-2">
                   <label className="text-xs font-medium text-slate-500 dark:text-slate-400">External Quiz Link (Google Forms, Quizlet, etc.)</label>
                   <Input 
                     value={topic.quizUrl || ''} 
@@ -297,7 +297,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     className="w-full text-sm"
                   />
                 </div>
-                <div className="w-1/3 space-y-2">
+                <div className="w-full sm:w-1/3 space-y-2">
                   <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Max Score</label>
                   <Input 
                     type="number"
@@ -353,12 +353,12 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
 
           {/* Assignments Section */}
           <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="flex flex-row flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h4 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 Assignments
               </h4>
               {isEditMode && (
-                <Button variant="secondary" size="sm" onClick={() => setIsAddingAssignment(true)}>
+                <Button variant="secondary" size="sm" onClick={() => setIsAddingAssignment(true)} className="w-full sm:w-auto">
                   <Plus className="w-4 h-4 mr-1" /> Add Assignment
                 </Button>
               )}
@@ -535,10 +535,10 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
               />
             )}
             <div>
-              <div className="flex flex-row flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Resources</h4>
                 {isEditMode && (
-                  <Button variant="secondary" size="sm" onClick={() => setIsAddingResource(true)}>
+                  <Button variant="secondary" size="sm" onClick={() => setIsAddingResource(true)} className="w-full sm:w-auto">
                     <Plus className="w-4 h-4 mr-1" /> Add Resource
                   </Button>
                 )}
