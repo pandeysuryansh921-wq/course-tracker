@@ -1,11 +1,13 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, Menu, X } from 'lucide-react';
+import { useSidebarStore } from '@/stores/useSidebarStore';
 
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const { isOpen, toggleSidebar } = useSidebarStore();
   
   // Basic breadcrumb parsing
   const pathParts = pathname.split('/').filter(Boolean);
@@ -18,7 +20,17 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 h-16 flex items-center justify-between px-4 md:px-6 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div className="flex items-center pl-12 md:pl-0 gap-3">
+      <div className="flex items-center gap-3">
+        {/* Mobile Toggle Button */}
+        <button 
+          className="md:hidden p-2 -ml-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors"
+          onClick={toggleSidebar}
+          id="mobile-menu-toggle"
+          aria-label="Toggle Menu"
+        >
+          {isOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+
         {/* App Logo Mark */}
         <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-violet-600 flex items-center justify-center text-white">
           <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>'; }} />

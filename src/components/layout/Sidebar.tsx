@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react';
 import { useThemeStore } from '@/stores/useThemeStore';
+import { useSidebarStore } from '@/stores/useSidebarStore';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,19 +28,10 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useThemeStore();
-  const [isOpen, setIsOpen] = useState(false);
+  const { isOpen, setIsOpen } = useSidebarStore();
 
   return (
     <>
-      {/* Mobile Toggle Button */}
-      <button 
-        className="md:hidden fixed top-3 left-4 z-50 p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-md text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-sm"
-        onClick={() => setIsOpen(!isOpen)}
-        id="mobile-menu-toggle"
-      >
-        {isOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
-
       {/* Overlay for mobile */}
       {isOpen && (
         <div 
