@@ -163,4 +163,4 @@ MIT
 
 ---
 
-Built with ☕ and 🎵 for self-learners everywhere.
+Built with ☕, 🎵, and the help of AI for self-learners everywhere.
