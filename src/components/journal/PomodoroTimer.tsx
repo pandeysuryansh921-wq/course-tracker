@@ -9,9 +9,90 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
+// Isolated component for the timer display to prevent parent re-renders on every tick
+const TimerDisplay = () => {
+  const timeRemaining = useTimerStore(state => state.timeRemaining);
+  const timeElapsed = useTimerStore(state => state.timeElapsed);
+  const mode = useTimerStore(state => state.mode);
+  const currentSession = useTimerStore(state => state.currentSession);
+  const config = useTimerStore(state => state.config);
+
+  const totalTime = mode === 'pomodoro' ? config.workDuration : 
+     mode === 'short-break' ? config.breakDuration : 
+     mode === 'long-break' ? config.longBreakDuration : 0;
+     
+  const progress = mode !== 'stopwatch' && totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
+  const radius = 120;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = mode !== 'stopwatch' ? circumference - (progress / 100) * circumference : 0;
+
+  const phaseColor = mode === 'stopwatch' ? 'text-cyan-500' : 
+                     mode === 'pomodoro' ? 'text-violet-500' : 
+                     'text-emerald-500';
+                     
+  const strokeColor = mode === 'stopwatch' ? 'stroke-cyan-500' : 
+                      mode === 'pomodoro' ? 'stroke-violet-500' : 
+                      'stroke-emerald-500';
+
+  return (
+    <div className="relative flex items-center justify-center mb-8 h-72 w-72 shrink-0">
+      <svg className="w-72 h-72 transform -rotate-90 shrink-0">
+        <circle
+          cx="144"
+          cy="144"
+          r={radius}
+          className="stroke-slate-200 dark:stroke-slate-800"
+          strokeWidth="12"
+          fill="none"
+        />
+        <circle
+          cx="144"
+          cy="144"
+          r={radius}
+          className={`${strokeColor} transition-all duration-1000 ease-linear`}
+          strokeWidth="12"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center justify-center pointer-events-none w-48">
+        {mode !== 'stopwatch' ? (
+          <div className={`flex items-center gap-2 mb-2 ${phaseColor} h-6`}>
+            {mode === 'pomodoro' ? <BookOpen className="w-5 h-5" /> : <Coffee className="w-5 h-5" />}
+            <span className="font-semibold uppercase tracking-wider text-sm">
+              {mode === 'pomodoro' ? 'Focus' : mode === 'short-break' ? 'Break' : 'Long Break'}
+            </span>
+          </div>
+        ) : (
+          <div className={`flex items-center gap-2 mb-2 ${phaseColor} h-6`}>
+            <Clock className="w-5 h-5" />
+            <span className="font-semibold uppercase tracking-wider text-sm">
+              Stopwatch
+            </span>
+          </div>
+        )}
+        <div 
+          className="text-6xl font-bold text-slate-800 dark:text-white tracking-tighter w-full text-center h-16 flex items-center justify-center"
+          style={{ fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum"' }}
+        >
+          {formatTimer(mode === 'stopwatch' ? timeElapsed : timeRemaining)}
+        </div>
+        <div className="mt-2 text-slate-500 dark:text-slate-400 font-medium h-6 flex items-center justify-center">
+          {mode !== 'stopwatch' && (
+            <span>Session {currentSession} of {config.longBreakInterval}</span>
+          )}
+        </div>
+      </div>
+      <div className={`absolute inset-0 rounded-full animate-ping opacity-10 pointer-events-none ${mode === 'pomodoro' || mode === 'stopwatch' ? 'bg-violet-500' : 'bg-emerald-500'}`}></div>
+    </div>
+  );
+};
+
 export default function PomodoroTimer() {
   const {
-    mode, state, timeRemaining, timeElapsed, currentSession,
+    mode, state,
     selectedTopicId, selectedCourseId, config,
     startTimer, pauseTimer, resumeTimer, resetTimer, skipBreak, tick, setMode, setTopic, updateConfig
   } = useTimerStore();
@@ -116,29 +197,11 @@ export default function PomodoroTimer() {
     }
   }, [localTopicId, localCourseId, courses, getCourseModules, getModuleTopics, setTopic]);
 
-  const totalTime = mode === 'pomodoro' ? config.workDuration : 
-     mode === 'short-break' ? config.breakDuration : 
-     mode === 'long-break' ? config.longBreakDuration : 0;
-     
-  const progress = mode !== 'stopwatch' && totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
-  const radius = 120;
-  const circumference = 2 * Math.PI * radius;
-  // Make stopwatch fill circle completely
-  const strokeDashoffset = mode !== 'stopwatch' ? circumference - (progress / 100) * circumference : 0;
-
-  const phaseColor = mode === 'stopwatch' ? 'text-cyan-500' : 
-                     mode === 'pomodoro' ? 'text-violet-500' : 
-                     'text-emerald-500';
-                     
-  const strokeColor = mode === 'stopwatch' ? 'stroke-cyan-500' : 
-                      mode === 'pomodoro' ? 'stroke-violet-500' : 
-                      'stroke-emerald-500';
-
   const availableModules = localCourseId ? getCourseModules(localCourseId) : [];
   const availableTopics = availableModules.flatMap(m => getModuleTopics(m.id));
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border border-slate-200 dark:border-slate-800 flex flex-col items-center w-full max-w-md mx-auto relative z-0">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border border-slate-200 dark:border-slate-800 flex flex-col items-center w-full max-w-md mx-auto relative z-0 min-h-[550px]">
       
       {/* Header / Mode Toggle */}
       <div className="flex items-center justify-between w-full mb-8 relative z-20 gap-2">
@@ -177,56 +240,7 @@ export default function PomodoroTimer() {
         </button>
       </div>
 
-      {/* Timer Display */}
-      <div className="relative flex items-center justify-center mb-8">
-        <svg className="w-72 h-72 transform -rotate-90">
-          <circle
-            cx="144"
-            cy="144"
-            r={radius}
-            className="stroke-slate-200 dark:stroke-slate-800"
-            strokeWidth="12"
-            fill="none"
-          />
-          <circle
-            cx="144"
-            cy="144"
-            r={radius}
-            className={`${strokeColor} transition-all duration-1000 ease-linear`}
-            strokeWidth="12"
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-          />
-        </svg>
-        <div className="absolute flex flex-col items-center justify-center pointer-events-none">
-          {mode !== 'stopwatch' ? (
-            <div className={`flex items-center gap-2 mb-2 ${phaseColor}`}>
-              {mode === 'pomodoro' ? <BookOpen className="w-5 h-5" /> : <Coffee className="w-5 h-5" />}
-              <span className="font-semibold uppercase tracking-wider text-sm">
-                {mode === 'pomodoro' ? 'Focus' : mode === 'short-break' ? 'Break' : 'Long Break'}
-              </span>
-            </div>
-          ) : (
-            <div className={`flex items-center gap-2 mb-2 ${phaseColor}`}>
-              <Clock className="w-5 h-5" />
-              <span className="font-semibold uppercase tracking-wider text-sm">
-                Stopwatch
-              </span>
-            </div>
-          )}
-          <div className="text-6xl font-bold text-slate-800 dark:text-white tabular-nums tracking-tighter">
-            {formatTimer(mode === 'stopwatch' ? timeElapsed : timeRemaining)}
-          </div>
-          {mode !== 'stopwatch' && (
-            <div className="mt-2 text-slate-500 dark:text-slate-400 font-medium">
-              Session {currentSession} of {config.longBreakInterval}
-            </div>
-          )}
-        </div>
-        <div className={`absolute inset-0 rounded-full animate-ping opacity-10 pointer-events-none ${mode === 'pomodoro' || mode === 'stopwatch' ? 'bg-violet-500' : 'bg-emerald-500'}`}></div>
-      </div>
+      <TimerDisplay />
 
       {/* Controls */}
       <div className="flex items-center gap-4 mb-8 relative z-20">
