@@ -50,7 +50,10 @@ export function Sidebar() {
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         {/* Logo/Brand */}
-        <div className="flex items-center gap-3 px-6 h-16 border-b border-slate-200 dark:border-slate-800 md:justify-start justify-center pt-2 md:pt-0">
+        <div 
+          className="flex items-center gap-3 px-6 border-b border-slate-200 dark:border-slate-800 md:justify-start justify-center pb-4"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 24px) + 16px)' }}
+        >
           <GraduationCap className="text-violet-600 dark:text-violet-400" size={28} />
           <span className="font-bold text-xl bg-gradient-to-r from-violet-600 to-teal-500 bg-clip-text text-transparent">
             DegreeTrack
@@ -91,7 +94,10 @@ export function Sidebar() {
         </nav>
 
         {/* Bottom Section */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+        <div 
+          className="px-4 pt-4 border-t border-slate-200 dark:border-slate-800"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 16px) + 16px)' }}
+        >
           <button
             onClick={toggleTheme}
             id="theme-toggle-btn"
