@@ -218,8 +218,8 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
         className={`flex flex-col sm:flex-row sm:items-center p-4 gap-4 ${(isLocked && !isEditMode) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         onClick={() => { if (!(isLocked && !isEditMode)) setIsExpanded(!isExpanded); }}
       >
-        <div className="flex-1 flex flex-wrap items-center gap-3">
-          <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 mr-1" disabled={isLocked && !isEditMode}>
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0" disabled={isLocked && !isEditMode}>
             {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
           
@@ -232,17 +232,17 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
             className="w-5 h-5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 cursor-pointer disabled:cursor-not-allowed shrink-0"
           />
           {topic.isMastered ? (
-            <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/20 shrink-0">Mastered 🌟</Badge>
+            <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/20 shrink-0 whitespace-nowrap">Mastered 🌟</Badge>
           ) : topic.isCompleted ? (
-            <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/20 shrink-0">Completed ✅</Badge>
+            <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/20 shrink-0 whitespace-nowrap">Completed ✅</Badge>
           ) : topic.status === 'needs-review' ? (
-            <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/20 shrink-0">Needs Review 🔄</Badge>
+            <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/20 shrink-0 whitespace-nowrap">Review 🔄</Badge>
           ) : (
-            <Badge className={`${getStatusBg(topic.status)} shrink-0`}>{getStatusLabel(topic.status)}</Badge>
+            <Badge className={`${getStatusBg(topic.status)} shrink-0 whitespace-nowrap`}>{getStatusLabel(topic.status)}</Badge>
           )}
-          <span className="font-medium text-slate-900 dark:text-white flex items-center gap-2">
+          <span className="font-medium text-slate-900 dark:text-white flex items-center gap-2 truncate flex-1 min-w-0">
             {(isLocked && !isEditMode) && <Lock className="w-4 h-4 text-slate-400 shrink-0" />}
-            {topic.name}
+            <span className="truncate">{topic.name}</span>
           </span>
         </div>
         
@@ -274,9 +274,9 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
       </div>
 
       {isExpanded && (
-        <div className="px-12 pb-4 pt-2">
+        <div className="pl-12 pr-4 pb-6 pt-2 space-y-4">
           {/* Quiz Section */}
-          <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
               Topic Quiz
               {topic.quizScore !== undefined && (
@@ -309,13 +309,13 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+              <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center w-full">
                 {topic.quizUrl ? (
                   <a 
                     href={topic.quizUrl} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-violet-100 hover:bg-violet-200 dark:bg-violet-900/30 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-lg text-sm font-medium transition-colors"
+                    className="inline-flex justify-center items-center gap-2 px-4 h-11 bg-violet-100 hover:bg-violet-200 dark:bg-violet-900/30 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-lg text-sm font-medium transition-colors"
                   >
                     Take Topic Quiz <ExternalLink className="w-4 h-4" />
                   </a>
@@ -323,22 +323,24 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                   <span className="text-sm text-slate-500 italic">No quiz available for this topic.</span>
                 )}
                 
-                <form onSubmit={handleScoreSubmit} className="flex items-center gap-2 w-full sm:w-auto">
-                  <div className="flex items-center gap-2">
+                <form onSubmit={handleScoreSubmit} className="flex flex-row items-center gap-3 w-full sm:w-auto">
+                  <div className="flex items-center flex-1 sm:flex-none">
                     <Input 
                       type="number"
                       min="0"
                       step="any"
-                      placeholder="Earned"
+                      placeholder="Score"
                       value={scoreInput}
                       onChange={(e) => setScoreInput(e.target.value)}
-                      className="w-24 text-sm"
+                      className="w-full sm:w-24 text-sm h-11 rounded-r-none border-r-0 focus:z-10"
                       required
                     />
-                    <span className="text-slate-500 font-medium">/ {topic.quizMaxScore || 100}</span>
+                    <div className="h-11 px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-r-md flex items-center text-slate-500 font-medium whitespace-nowrap">
+                      / {topic.quizMaxScore || 100}
+                    </div>
                   </div>
-                  <Button type="submit" size="sm" variant="secondary" disabled={!scoreInput}>
-                    Submit Score
+                  <Button type="submit" variant="primary" className="h-11 px-6 font-semibold shrink-0" disabled={!scoreInput}>
+                    Submit
                   </Button>
                 </form>
               </div>
@@ -352,7 +354,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
           </div>
 
           {/* Assignments Section */}
-          <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h4 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 Assignments
@@ -531,10 +533,10 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                 value={topic.notes || ''}
                 onChange={(e) => updateTopic(topic.id, { notes: e.target.value })}
                 placeholder="Add notes for this topic..."
-                className="w-full text-sm"
+                className="w-full text-sm min-h-[100px]"
               />
             )}
-            <div>
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Resources</h4>
                 {isEditMode && (

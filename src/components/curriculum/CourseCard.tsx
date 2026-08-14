@@ -34,7 +34,8 @@ export default function CourseCard({ course, progress, moduleCount, topicCount }
       >
         <button
           onClick={handleDelete}
-          className="absolute top-4 right-4 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute top-4 right-4 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 p-2 rounded-md transition-colors z-10"
+          aria-label="Delete course"
         >
           <Trash2 className="w-4 h-4" />
         </button>
