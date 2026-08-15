@@ -79,7 +79,7 @@ export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModal
     <Modal isOpen={isOpen} onClose={onClose} title="Community Library">
       <div className="flex flex-col gap-4">
         <p className="text-sm text-[var(--text-muted)]">
-          Browse and download courses created by the DegreeTrack community. Click "Download" to instantly import a course into your app.
+          Browse and download courses created by the Course Tracker community. Click "Download" to instantly import a course into your app.
         </p>
 
         {error && (
