@@ -168,6 +168,14 @@ export const useTimerStore = create<TimerStateStore>((set, get) => ({
 
     await db.studySessions.put(session);
     set(state => ({ sessions: [...state.sessions, session] }));
+
+    // Award XP based on duration (1 XP per minute)
+    const earnedXP = Math.floor(timeElapsed / 60);
+    if (earnedXP > 0) {
+      import('@/stores/useUserStore').then(({ useUserStore }) => {
+        useUserStore.getState().addXP(earnedXP);
+      });
+    }
   },
 
   getSessions: async () => {

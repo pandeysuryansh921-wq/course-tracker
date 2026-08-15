@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import { db } from '@/lib/db';
-import { Course, Module, Topic, Resource, TopicStatus, ResourceType, CurriculumStats, GemLink, Assignment } from '@/types/curriculum';
+import type { 
+  Course, 
+  Module, 
+  Topic, 
+  Resource, 
+  ResourceType, 
+  TopicStatus,
+  Assignment,
+  Flashcard,
+  GemLink
+} from '@/types/curriculum';
 import { generateId } from '@/lib/utils';
 
 interface CurriculumState {
@@ -8,19 +18,35 @@ interface CurriculumState {
   modules: Module[];
   topics: Topic[];
   resources: Resource[];
+  flashcards: Flashcard[];
   isLoading: boolean;
+  error: string | null;
   isInitialized: boolean;
+}
+
+export interface CurriculumStats {
+  totalCourses: number;
+  completedCourses: number;
+  totalTopics: number;
+  completedTopics: number;
+  overallProgress: number;
+  topicsNeedsReview: number;
+}
+
+interface CurriculumActions {
+  initialize: (force?: boolean) => Promise<void>;
   
-  initialize: () => Promise<void>;
-  
+  // Course actions
   addCourse: (name: string, description: string, color?: string, icon?: string, gemLinks?: GemLink[]) => Promise<Course>;
   updateCourse: (id: string, updates: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   
+  // Module actions
   addModule: (courseId: string, name: string, description: string, notebookUrl?: string) => Promise<Module>;
   updateModule: (id: string, updates: Partial<Module>) => Promise<void>;
   deleteModule: (id: string) => Promise<void>;
   
+  // Topic actions
   addTopic: (moduleId: string, courseId: string, name: string, quizUrl?: string, quizMaxScore?: number) => Promise<Topic>;
   updateTopic: (id: string, updates: Partial<Topic>) => Promise<void>;
   deleteTopic: (id: string) => Promise<void>;
@@ -28,39 +54,53 @@ interface CurriculumState {
   toggleTopicCompletion: (id: string, isCompleted: boolean) => Promise<void>;
   submitTopicScore: (id: string, score: number) => Promise<void>;
   
+  // Assignment actions
   addAssignment: (topicId: string, assignment: Omit<Assignment, 'id'>) => Promise<void>;
   updateAssignment: (topicId: string, assignmentId: string, updates: Partial<Assignment>) => Promise<void>;
   deleteAssignment: (topicId: string, assignmentId: string) => Promise<void>;
-  
+
+  // Resource actions
   addResource: (topicId: string, title: string, url: string, type: ResourceType) => Promise<Resource>;
   deleteResource: (id: string) => Promise<void>;
+
+  // Flashcard actions
+  addFlashcard: (topicId: string, front: string, back: string) => Promise<Flashcard>;
+  updateFlashcard: (id: string, updates: Partial<Flashcard>) => Promise<void>;
+  deleteFlashcard: (id: string) => Promise<void>;
+  reviewFlashcard: (id: string, quality: number) => Promise<void>;
   
+  // Selectors
   getCourseModules: (courseId: string) => Module[];
   getModuleTopics: (moduleId: string) => Topic[];
+  getTopicFlashcards: (topicId: string) => Flashcard[];
   getCourseProgress: (courseId: string) => number;
   getOverallStats: () => CurriculumStats;
 }
 
-export const useCurriculumStore = create<CurriculumState>((set, get) => ({
+export const useCurriculumStore = create<CurriculumState & CurriculumActions>((set, get) => ({
   courses: [],
   modules: [],
   topics: [],
   resources: [],
+  flashcards: [],
   isLoading: false,
+  error: null,
   isInitialized: false,
 
-  initialize: async () => {
-    if (get().isInitialized) return;
+  initialize: async (force?: boolean) => {
+    if (get().isInitialized && !force) return;
     set({ isLoading: true });
     try {
       const courses = await db.courses.toArray();
       const modules = await db.modules.toArray();
       const topics = await db.topics.toArray();
       const resources = await db.resources.toArray();
+      const flashcards = await db.flashcards.toArray();
       
-      set({ courses, modules, topics, resources, isInitialized: true });
+      set({ courses, modules, topics, resources, flashcards, isInitialized: true });
     } catch (error) {
       console.error("Failed to initialize curriculum store:", error);
+      set({ error: (error as Error).message });
     } finally {
       set({ isLoading: false });
     }
@@ -73,9 +113,9 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
       description,
       color,
       icon,
-      gemLinks,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      gemLinks,
     };
     await db.courses.put(newCourse);
     set((state) => ({ courses: [...state.courses, newCourse] }));
@@ -209,6 +249,12 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
     if (!topic) return;
     const status: TopicStatus = isCompleted ? 'completed' : (topic.status === 'completed' ? 'in-progress' : topic.status);
     await get().updateTopic(id, { status, isCompleted });
+
+    if (isCompleted && topic.status !== 'completed') {
+      import('@/stores/useUserStore').then(({ useUserStore }) => {
+        useUserStore.getState().addXP(50); // 50 XP for completing a topic
+      });
+    }
   },
 
   submitTopicScore: async (id, score) => {
@@ -237,6 +283,12 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
     }
 
     await get().updateTopic(id, { quizScore: score, isMastered, isCompleted, status });
+
+    if (isCompleted && topic.status !== 'completed') {
+      import('@/stores/useUserStore').then(({ useUserStore }) => {
+        useUserStore.getState().addXP(100); // 100 XP for passing a quiz
+      });
+    }
 
     // Auto-unlock next sequential item (mark next topic as in-progress if it's not-started)
     if (isCompleted) {
@@ -303,12 +355,84 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
     set((state) => ({ resources: state.resources.filter(r => r.id !== id) }));
   },
 
+  addFlashcard: async (topicId, front, back) => {
+    const newFlashcard: Flashcard = {
+      id: generateId(),
+      topicId,
+      front,
+      back,
+      nextReview: new Date(),
+      interval: 0,
+      easeFactor: 2.5,
+      repetitions: 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    await db.flashcards.put(newFlashcard);
+    set((state) => ({ flashcards: [...state.flashcards, newFlashcard] }));
+    return newFlashcard;
+  },
+
+  updateFlashcard: async (id, updates) => {
+    const updated = { ...updates, updatedAt: new Date() };
+    await db.flashcards.update(id, updated);
+    set((state) => ({
+      flashcards: state.flashcards.map(f => f.id === id ? { ...f, ...updated } : f)
+    }));
+  },
+
+  deleteFlashcard: async (id) => {
+    await db.flashcards.delete(id);
+    set((state) => ({ flashcards: state.flashcards.filter(f => f.id !== id) }));
+  },
+
+  reviewFlashcard: async (id, quality) => {
+    // SuperMemo-2 Algorithm
+    const flashcard = get().flashcards.find(f => f.id === id);
+    if (!flashcard) return;
+
+    let repetitions = flashcard.repetitions;
+    let interval = flashcard.interval;
+    let easeFactor = flashcard.easeFactor;
+
+    if (quality >= 3) {
+      if (repetitions === 0) {
+        interval = 1;
+      } else if (repetitions === 1) {
+        interval = 6;
+      } else {
+        interval = Math.round(interval * easeFactor);
+      }
+      repetitions++;
+    } else {
+      repetitions = 0;
+      interval = 1;
+    }
+
+    easeFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    if (easeFactor < 1.3) easeFactor = 1.3;
+
+    const nextReview = new Date();
+    nextReview.setDate(nextReview.getDate() + interval);
+
+    await get().updateFlashcard(id, {
+      repetitions,
+      interval,
+      easeFactor,
+      nextReview
+    });
+  },
+
   getCourseModules: (courseId) => {
     return get().modules.filter(m => m.courseId === courseId).sort((a, b) => a.order - b.order);
   },
 
   getModuleTopics: (moduleId) => {
     return get().topics.filter(t => t.moduleId === moduleId).sort((a, b) => a.order - b.order);
+  },
+
+  getTopicFlashcards: (topicId) => {
+    return get().flashcards.filter(f => f.topicId === topicId).sort((a, b) => a.nextReview.getTime() - b.nextReview.getTime());
   },
 
   getCourseProgress: (courseId) => {

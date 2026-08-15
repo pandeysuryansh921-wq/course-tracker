@@ -138,3 +138,50 @@ export const COURSE_ICONS = [
   'Globe', 'Layers', 'Lightbulb', 'Monitor', 'Palette',
   'PenTool', 'Server', 'Shield', 'Terminal', 'Zap',
 ];
+
+export function downloadBase64File(base64Data: string, filename: string) {
+  try {
+    const parts = base64Data.split(';base64,');
+    if (parts.length !== 2) {
+      // If it's not a valid base64 data URI, just try to open it
+      window.open(base64Data, '_blank');
+      return;
+    }
+    
+    const contentType = parts[0].split(':')[1];
+    const byteCharacters = atob(parts[1]);
+    const byteArrays: Uint8Array[] = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+
+    const blob = new Blob(byteArrays, { type: contentType });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (error) {
+    console.error("Failed to download file:", error);
+    // Fallback
+    const a = document.createElement('a');
+    a.href = base64Data;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+

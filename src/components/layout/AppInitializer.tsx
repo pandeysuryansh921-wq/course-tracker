@@ -4,15 +4,18 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useSidebarStore } from '@/stores/useSidebarStore';
+import { useUserStore } from '@/stores/useUserStore';
 import { App } from '@capacitor/app';
 
 export function AppInitializer() {
   const initCurriculum = useCurriculumStore((state) => state.initialize);
+  const initUser = useUserStore((state) => state.initialize);
   const router = useRouter();
 
   useEffect(() => {
     if (typeof initCurriculum === 'function') initCurriculum();
-  }, [initCurriculum]);
+    if (typeof initUser === 'function') initUser();
+  }, [initCurriculum, initUser]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

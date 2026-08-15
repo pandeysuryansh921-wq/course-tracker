@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { ProgressRing } from '@/components/dashboard/ProgressRing'
 import { StatsCard } from '@/components/dashboard/StatsCard'
+import { GamificationWidget } from '@/components/dashboard/GamificationWidget'
 import { useCurriculumStore } from '@/stores/useCurriculumStore'
 import { useTimerStore } from '@/stores/useTimerStore'
 import { BookOpen, CheckCircle, Flame, Calendar, Play, Plus, Clock } from 'lucide-react'
@@ -173,6 +174,8 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <GamificationWidget />
+        
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Due for Review</h2>

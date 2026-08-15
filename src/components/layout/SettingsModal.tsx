@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
-import { Download, Upload, Moon, Sun, AlertCircle } from 'lucide-react';
+import { Download, Upload, Moon, Sun, AlertCircle, Cloud } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -47,6 +47,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setIsImporting(true);
       setError(null);
       await importCourseFromZip(file);
+      await useCurriculumStore.getState().initialize(true);
       setSuccess("Course imported successfully! Check your dashboard.");
       setTimeout(() => setSuccess(null), 3000);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -126,6 +127,28 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Cloud Sync */}
+        <div className="flex flex-col gap-3 pb-6 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium text-[var(--text-main)] flex items-center gap-2">
+                <Cloud className="w-4 h-4" /> Cloud Sync
+              </h3>
+              <p className="text-sm text-[var(--text-muted)]">Backup your data to Google Drive.</p>
+            </div>
+            <span className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 rounded-full dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
+              Under Development
+            </span>
+          </div>
+          <button
+            onClick={() => alert("Google Drive Sync is currently under development.")}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-lg transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 w-full"
+          >
+            <Cloud size={18} />
+            Connect Google Drive
+          </button>
         </div>
 
         {/* Theme Toggle */}

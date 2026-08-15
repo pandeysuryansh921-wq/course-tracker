@@ -2,8 +2,9 @@
 
 import React from 'react';
 import { Resource } from '@/types/curriculum';
-import { FileText, BookOpen, Globe, File, Video, Trash2, Image as ImageIcon, Link as LinkIcon } from 'lucide-react';
+import { FileText, BookOpen, Globe, File, Video, Trash2, Image as ImageIcon, Link as LinkIcon, Download } from 'lucide-react';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
+import { downloadBase64File } from '@/lib/utils';
 
 interface ResourceLinkProps {
   resource: Resource;
@@ -65,7 +66,7 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
           <div className="flex justify-between items-center p-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{resource.title}</span>
             <div className="flex gap-3">
-               <a href={resource.url} download={resource.title} className="text-xs font-medium text-violet-600 hover:underline">Download</a>
+               <button onClick={() => downloadBase64File(resource.url, resource.title)} className="text-xs font-medium text-violet-600 hover:underline flex items-center gap-1"><Download className="w-3 h-3"/> Download</button>
                <button onClick={() => setIsViewing(false)} className="text-xs font-medium text-slate-500 hover:text-slate-700">Close</button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, Timer as TimerIcon, Clock, Coffee, BookOpen, Settings } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Timer as TimerIcon, Clock, Coffee, BookOpen, Settings, Volume2, ShieldAlert } from 'lucide-react';
 import { useTimerStore } from '@/stores/useTimerStore';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { formatTimer } from '@/lib/utils';
@@ -307,6 +307,30 @@ export default function PomodoroTimer() {
             ))}
           </select>
         )}
+      </div>
+
+      <div className="w-full flex items-center justify-between mt-6 pt-6 border-t border-slate-100 dark:border-slate-800/50">
+        <button 
+          onClick={() => alert("Ambient Sounds (Rain, Cafe, White Noise) are under development.")}
+          className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-violet-600 transition-colors"
+        >
+          <Volume2 className="w-4 h-4" />
+          <span>Ambient Sound</span>
+          <span className="ml-1 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 bg-amber-100 rounded border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50">
+            Dev
+          </span>
+        </button>
+
+        <button 
+          onClick={() => alert("Strict Mode (Full screen, XP penalty for leaving) is under development.")}
+          className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-red-500 transition-colors"
+        >
+          <ShieldAlert className="w-4 h-4" />
+          <span>Strict Mode</span>
+          <span className="ml-1 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 bg-amber-100 rounded border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50">
+            Dev
+          </span>
+        </button>
       </div>
 
       {/* Settings Modal */}

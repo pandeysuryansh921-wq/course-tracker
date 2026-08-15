@@ -2,15 +2,16 @@
 
 import React, { useState } from 'react';
 import { Topic, Resource, FileAttachmentType, AssignmentFile } from '@/types/curriculum';
-import { ChevronDown, ChevronRight, Trash2, Plus, Lock, ExternalLink, FileText, CheckCircle, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, Plus, Lock, ExternalLink, FileText, CheckCircle, Clock, BrainCircuit } from 'lucide-react';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { getStatusBg, getStatusLabel } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import ResourceLink from '@/components/curriculum/ResourceLink';
+import { FlashcardModal } from '@/components/curriculum/FlashcardModal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { TextArea } from '@/components/ui/TextArea';
-import { generateId } from '@/lib/utils';
+import { generateId, downloadBase64File } from '@/lib/utils';
 
 interface TopicRowProps {
   topic: Topic;
@@ -25,6 +26,9 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [newResource, setNewResource] = React.useState({ title: '', url: '', type: 'other' });
   const [scoreInput, setScoreInput] = React.useState('');
+  
+  const [isFlashcardModalOpen, setIsFlashcardModalOpen] = React.useState(false);
+  const flashcards = useCurriculumStore(state => state.flashcards).filter(f => f.topicId === topic.id);
   
   const [isAddingAssignment, setIsAddingAssignment] = React.useState(false);
   const [assignmentSource, setAssignmentSource] = React.useState<'link' | 'upload'>('link');
@@ -309,40 +313,61 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center w-full">
-                {topic.quizUrl ? (
-                  <a 
-                    href={topic.quizUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex justify-center items-center gap-2 px-4 h-11 bg-violet-100 hover:bg-violet-200 dark:bg-violet-900/30 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Take Topic Quiz <ExternalLink className="w-4 h-4" />
-                  </a>
-                ) : (
-                  <span className="text-sm text-slate-500 italic">No quiz available for this topic.</span>
-                )}
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center w-full">
+                  {topic.quizUrl ? (
+                    <a 
+                      href={topic.quizUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex justify-center items-center gap-2 px-4 h-11 bg-violet-100 hover:bg-violet-200 dark:bg-violet-900/30 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Take Topic Quiz <ExternalLink className="w-4 h-4" />
+                    </a>
+                  ) : (
+                    <span className="text-sm text-slate-500 italic">No quiz available for this topic.</span>
+                  )}
+                  
+                  <form onSubmit={handleScoreSubmit} className="flex flex-row items-center gap-3 w-full sm:w-auto">
+                    <div className="flex items-center flex-1 sm:flex-none">
+                      <Input 
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Score"
+                        value={scoreInput}
+                        onChange={(e) => setScoreInput(e.target.value)}
+                        className="w-full sm:w-24 text-sm h-11 rounded-r-none border-r-0 focus:z-10"
+                        required
+                      />
+                      <div className="h-11 px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-r-md flex items-center text-slate-500 font-medium whitespace-nowrap">
+                        / {topic.quizMaxScore || 100}
+                      </div>
+                    </div>
+                    <Button type="submit" variant="primary" className="h-11 px-6 font-semibold shrink-0" disabled={!scoreInput}>
+                      Submit
+                    </Button>
+                  </form>
+                </div>
                 
-                <form onSubmit={handleScoreSubmit} className="flex flex-row items-center gap-3 w-full sm:w-auto">
-                  <div className="flex items-center flex-1 sm:flex-none">
-                    <Input 
-                      type="number"
-                      min="0"
-                      step="any"
-                      placeholder="Score"
-                      value={scoreInput}
-                      onChange={(e) => setScoreInput(e.target.value)}
-                      className="w-full sm:w-24 text-sm h-11 rounded-r-none border-r-0 focus:z-10"
-                      required
-                    />
-                    <div className="h-11 px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-r-md flex items-center text-slate-500 font-medium whitespace-nowrap">
-                      / {topic.quizMaxScore || 100}
+                <div className="mt-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                  <div className="flex items-center justify-between bg-violet-50 dark:bg-violet-900/10 p-3 rounded-lg border border-violet-100 dark:border-violet-900/20">
+                    <div>
+                      <h5 className="text-sm font-medium text-violet-900 dark:text-violet-100 flex items-center gap-2">
+                        <BrainCircuit className="w-4 h-4" /> AI Quiz Generation
+                      </h5>
+                      <p className="text-xs text-violet-700 dark:text-violet-400 mt-1">Generate a quiz locally based on your resources.</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="px-2 py-0.5 text-[10px] font-medium text-amber-700 bg-amber-100 rounded border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50">
+                        Under Development
+                      </span>
+                      <Button variant="secondary" size="sm" onClick={() => alert("Local AI Quiz generation is currently under development.")} className="h-8 text-xs bg-white dark:bg-slate-800">
+                        Generate Quiz
+                      </Button>
                     </div>
                   </div>
-                  <Button type="submit" variant="primary" className="h-11 px-6 font-semibold shrink-0" disabled={!scoreInput}>
-                    Submit
-                  </Button>
-                </form>
+                </div>
               </div>
             )}
             
@@ -453,9 +478,9 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                               Open Assignment Brief <ExternalLink className="w-3 h-3 ml-1 shrink-0" />
                             </a>
                           ) : (
-                            <a href={assignment.file.url} target="_blank" rel="noopener noreferrer" download={assignment.file.name} className="text-xs text-violet-600 hover:underline inline-flex items-center truncate">
+                            <button onClick={() => downloadBase64File(assignment.file!.url, assignment.file!.name)} className="text-xs text-violet-600 hover:underline inline-flex items-center truncate">
                               Download {assignment.file.name} <ExternalLink className="w-3 h-3 ml-1 shrink-0" />
-                            </a>
+                            </button>
                           )}
                         </div>
                       )}
@@ -465,9 +490,15 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                            <span className="truncate" title={assignment.submissionFile.name}>
                              {assignment.submissionFile.name}
                            </span>
-                           <a href={assignment.submissionFile.url} target="_blank" rel="noopener noreferrer" download={assignment.submissionFile.type !== 'link' ? assignment.submissionFile.name : undefined} className="text-violet-600 hover:underline shrink-0 font-medium">
-                             View Submission
-                           </a>
+                           {assignment.submissionFile.type !== 'link' ? (
+                             <button onClick={() => downloadBase64File(assignment.submissionFile!.url, assignment.submissionFile!.name)} className="text-violet-600 hover:underline shrink-0 font-medium">
+                               View Submission
+                             </button>
+                           ) : (
+                             <a href={assignment.submissionFile.url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline shrink-0 font-medium">
+                               View Submission
+                             </a>
+                           )}
                         </div>
                       )}
                     </div>
@@ -544,6 +575,10 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     <Plus className="w-4 h-4 mr-1" /> Add Resource
                   </Button>
                 )}
+                <Button variant="secondary" size="sm" onClick={() => setIsFlashcardModalOpen(true)} className="w-full sm:w-auto border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800/50 dark:text-violet-400 dark:hover:bg-violet-900/30">
+                  <BrainCircuit className="w-4 h-4 mr-1" /> 
+                  Flashcards {flashcards.length > 0 && `(${flashcards.length})`}
+                </Button>
               </div>
               
               {isAddingResource && (
@@ -631,6 +666,12 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
           </div>
         </div>
       )}
+      
+      <FlashcardModal 
+        isOpen={isFlashcardModalOpen} 
+        onClose={() => setIsFlashcardModalOpen(false)} 
+        topicId={topic.id} 
+      />
     </div>
   );
 }

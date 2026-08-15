@@ -90,3 +90,26 @@ export interface CurriculumStats {
   overallProgress: number;
   topicsNeedsReview: number;
 }
+
+export interface UserProfile {
+  id: string; // Typically just "me" since it's local
+  name: string;
+  xp: number;
+  level: number;
+  badges: string[]; // IDs or names of unlocked badges
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Flashcard {
+  id: string;
+  topicId: string;
+  front: string;
+  back: string;
+  nextReview: Date;
+  interval: number;
+  easeFactor: number;
+  repetitions: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
