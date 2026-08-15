@@ -17,11 +17,22 @@ A privacy-focused, local-first web application that helps self-learners structur
 - **Resource links** attached to each topic (videos, PDFs, articles, textbooks)
 - **Per-topic notes** with inline editing
 - **Progress bars** at every level (course, module) with real-time calculations
+- **Course Import/Export**: Backup entire courses (including structure, files, and assignments) to a `.zip` file, and share or import them seamlessly.
 
-### 📝 Assignment Tracker & File Uploads
+### 🧠 Smart Flashcards (Spaced Repetition)
+- **SuperMemo-2 Algorithm**: Automatically schedules flashcard reviews based on your recall performance.
+- **Embedded inside topics**: Create flashcards directly linked to specific curriculum topics.
+- **Study Mode**: Clean, distraction-free interface for reviewing due flashcards.
+
+### 🎮 Gamification
+- **XP System**: Earn XP by completing topics (+50 XP) and mastering quizzes (+100 XP).
+- **Levels**: Automatically level up as your XP grows, giving you a visual sense of progression.
+- **Gamification Widget**: A beautiful dashboard widget that tracks your level progress bar and total XP.
+
+### 📝 Assignment Tracker & Native File Support
 - **File Attachments**: Course creators can attach assignment briefs (PDF, images, documents) or external links directly to a topic.
 - **Student Submissions**: Students can upload their completed assignment files or paste external links (e.g., Google Drive, GitHub) for self-managed tracking.
-- **Local Storage**: Uploaded files are converted and stored securely within your browser's IndexedDB.
+- **Mobile Native Sharing**: Full support for Android/iOS Capacitor APIs. Downloaded files instantly trigger the native Share Sheet for easy viewing.
 
 ### ⏱️ Study Journal & Pomodoro Timer
 - **Dual timer modes**: Pomodoro (25/5/15 configurable) or free-form Stopwatch
