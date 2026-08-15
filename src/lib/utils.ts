@@ -162,7 +162,7 @@ export function downloadBase64File(base64Data: string, filename: string) {
       byteArrays.push(byteArray);
     }
 
-    const blob = new Blob(byteArrays, { type: contentType });
+    const blob = new Blob(byteArrays as unknown as BlobPart[], { type: contentType });
     const blobUrl = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
