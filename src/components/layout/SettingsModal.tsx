@@ -5,7 +5,8 @@ import { Modal } from '@/components/ui/Modal';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
-import { Download, Upload, Moon, Sun, AlertCircle, Cloud } from 'lucide-react';
+import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen } from 'lucide-react';
+import { CommunityLibraryModal } from './CommunityLibraryModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,6 +61,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title="Settings & Options">
       <div className="flex flex-col gap-6">
         
@@ -79,7 +82,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         {/* Import Section */}
         <div className="flex flex-col gap-3 pb-6 border-b border-border">
           <h3 className="font-medium text-[var(--text-main)]">Import Course</h3>
-          <p className="text-sm text-[var(--text-muted)]">Upload a previously exported .zip package to add it to your curriculum.</p>
+          <p className="text-sm text-[var(--text-muted)]">Add a course to your curriculum by uploading a .zip package or browsing the community library.</p>
           
           <input 
             type="file" 
@@ -88,14 +91,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             ref={fileInputRef}
             onChange={handleImport}
           />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="flex items-center justify-center gap-2 px-4 py-2 mt-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Upload size={18} />
-            {isImporting ? 'Importing...' : 'Import from .zip'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 mt-2">
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 font-medium"
+            >
+              <Upload size={18} />
+              {isImporting ? 'Importing...' : 'From Device (.zip)'}
+            </button>
+            <button 
+              onClick={() => setIsLibraryOpen(true)}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors font-medium border border-slate-200 dark:border-slate-700"
+            >
+              <BookOpen size={18} />
+              Community Library
+            </button>
+          </div>
         </div>
 
         {/* Export Section */}
@@ -170,5 +182,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
       </div>
     </Modal>
+    
+    <CommunityLibraryModal 
+      isOpen={isLibraryOpen} 
+      onClose={() => setIsLibraryOpen(false)} 
+    />
+    </>
   );
 }
