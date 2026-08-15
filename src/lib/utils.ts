@@ -1,3 +1,7 @@
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
 // Utility helpers for DegreeTrack
 
 export function generateId(): string {
@@ -139,7 +143,7 @@ export const COURSE_ICONS = [
   'PenTool', 'Server', 'Shield', 'Terminal', 'Zap',
 ];
 
-export function downloadBase64File(base64Data: string, filename: string) {
+export async function downloadBase64File(base64Data: string, filename: string) {
   try {
     const parts = base64Data.split(';base64,');
     if (parts.length !== 2) {
@@ -149,7 +153,26 @@ export function downloadBase64File(base64Data: string, filename: string) {
     }
     
     const contentType = parts[0].split(':')[1];
-    const byteCharacters = atob(parts[1]);
+    const b64Data = parts[1];
+
+    if (Capacitor.isNativePlatform()) {
+      // 1. Write file to the Cache directory native filesystem
+      const savedFile = await Filesystem.writeFile({
+        path: filename,
+        data: b64Data,
+        directory: Directory.Cache,
+      });
+
+      // 2. Share / Open it natively
+      await Share.share({
+        url: savedFile.uri,
+        title: filename,
+      });
+      return;
+    }
+
+    // --- Web Fallback ---
+    const byteCharacters = atob(b64Data);
     const byteArrays: Uint8Array[] = [];
 
     for (let offset = 0; offset < byteCharacters.length; offset += 512) {
@@ -163,6 +186,23 @@ export function downloadBase64File(base64Data: string, filename: string) {
     }
 
     const blob = new Blob(byteArrays as unknown as BlobPart[], { type: contentType });
+
+    // Optional Web Share API fallback
+    if (navigator.share) {
+      try {
+        const file = new File([blob], filename, { type: contentType });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: filename,
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn("Web Share API failed, falling back to direct download", e);
+      }
+    }
+
     const blobUrl = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
@@ -175,7 +215,7 @@ export function downloadBase64File(base64Data: string, filename: string) {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (error) {
     console.error("Failed to download file:", error);
-    // Fallback
+    // Ultimate Fallback
     const a = document.createElement('a');
     a.href = base64Data;
     a.download = filename;
