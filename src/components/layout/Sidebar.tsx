@@ -10,13 +10,13 @@ import {
   Brain, 
   Clock, 
   BarChart3, 
-  Sun, 
-  Moon,
+  Settings,
   Menu,
   X
 } from 'lucide-react';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { useSidebarStore } from '@/stores/useSidebarStore';
+import { SettingsModal } from '@/components/layout/SettingsModal';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -29,6 +29,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useThemeStore();
   const { isOpen, setIsOpen } = useSidebarStore();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
     <>
@@ -99,19 +100,21 @@ export function Sidebar() {
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 16px) + 16px)' }}
         >
           <button
-            onClick={toggleTheme}
-            id="theme-toggle-btn"
+            onClick={() => setIsSettingsOpen(true)}
+            id="settings-toggle-btn"
             className="flex items-center justify-between w-full px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors group"
           >
             <div className="flex items-center gap-3">
-              <div className="transition-transform group-hover:rotate-12">
-                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+              <div className="transition-transform group-hover:rotate-45">
+                <Settings size={20} />
               </div>
-              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+              <span>Settings</span>
             </div>
           </button>
         </div>
       </aside>
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </>
   );
 }
