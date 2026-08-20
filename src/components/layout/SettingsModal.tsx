@@ -122,7 +122,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <select
                 value={selectedCourseId}
                 onChange={(e) => setSelectedCourseId(e.target.value)}
-                className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-[var(--text-main)]"
+                className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white font-medium"
               >
                 <option value="">Select a course...</option>
                 {courses.map(c => (
@@ -132,10 +132,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <button
                 onClick={handleExport}
                 disabled={!selectedCourseId || isExporting}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-[var(--text-main)] text-[var(--bg-main)] rounded-lg transition-transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg transition-transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none font-medium whitespace-nowrap"
               >
                 <Download size={18} />
-                {isExporting ? 'Exporting...' : 'Export'}
+                <span className="font-medium">{isExporting ? 'Exporting...' : 'Export'}</span>
               </button>
             </div>
           )}
