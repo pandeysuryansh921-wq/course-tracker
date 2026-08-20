@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ExternalLink, Copy, Check, Sparkles } from 'lucide-react';
+import React from 'react';
+import { ExternalLink, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 import { GemLink } from '@/types/curriculum';
@@ -9,14 +9,6 @@ interface GeminiGemCardProps {
 }
 
 export default function GeminiGemCard({ gem }: GeminiGemCardProps) {
-  const [copied, setCopied] = useState(false);
-  const starterPrompt = "Hello! I am a student taking this course. Can you help me build a study plan and quiz me on the key concepts?";
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(starterPrompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between overflow-hidden relative">
@@ -29,22 +21,9 @@ export default function GeminiGemCard({ gem }: GeminiGemCardProps) {
           <Sparkles className="w-5 h-5 text-violet-500" />
           {gem.title}
         </h3>
-        <p className="text-slate-600 dark:text-slate-400 mb-4 text-sm max-w-xl leading-relaxed">
+        <p className="text-slate-600 dark:text-slate-400 mb-0 text-sm max-w-xl leading-relaxed">
           {gem.description || "Get personalized help, generate study plans, and take practice quizzes using this dedicated Gemini Gem."}
         </p>
-        
-        <div className="bg-slate-50 dark:bg-slate-800/80 rounded-lg p-4 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 max-w-xl group">
-          <p className="text-sm text-slate-500 dark:text-slate-400 italic flex-1 line-clamp-2">
-            "{starterPrompt}"
-          </p>
-          <button 
-            onClick={handleCopy}
-            className="flex items-center justify-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 px-3 py-1.5 rounded-md border border-slate-200 dark:border-slate-600 transition-colors shrink-0 shadow-sm"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? 'Copied!' : 'Copy Prompt'}
-          </button>
-        </div>
       </div>
       
       <div className="w-full md:w-auto relative z-10 shrink-0">
