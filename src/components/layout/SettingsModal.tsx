@@ -82,11 +82,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         {/* Import Section */}
         <div className="flex flex-col gap-3 pb-6 border-b border-border">
           <h3 className="font-medium text-[var(--text-main)]">Import Course</h3>
-          <p className="text-sm text-[var(--text-muted)]">Add a course to your curriculum by uploading a .zip package or browsing the community library.</p>
+          <p className="text-sm text-[var(--text-muted)]">Add a course to your curriculum by uploading a .zip package or a raw .json file, or browsing the community library.</p>
           
           <input 
             type="file" 
-            accept=".zip" 
+            accept=".zip,.json" 
             className="hidden" 
             ref={fileInputRef}
             onChange={handleImport}
@@ -98,7 +98,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 font-medium"
             >
               <Upload size={18} />
-              {isImporting ? 'Importing...' : 'From Device (.zip)'}
+              {isImporting ? 'Importing...' : 'From Device (.zip/.json)'}
             </button>
             <button 
               onClick={() => setIsLibraryOpen(true)}

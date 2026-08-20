@@ -90,14 +90,22 @@ export const exportCourseToZip = async (courseId: string) => {
 };
 
 export const importCourseFromZip = async (file: File) => {
-  const zip = new JSZip();
-  const loadedZip = await zip.loadAsync(file);
+  let data;
+  let loadedZip: JSZip | null = null;
 
-  const jsonFile = loadedZip.file("course.json");
-  if (!jsonFile) throw new Error("Invalid package: course.json missing");
+  if (file.name.endsWith('.json')) {
+    const text = await file.text();
+    data = JSON.parse(text);
+  } else {
+    const zip = new JSZip();
+    loadedZip = await zip.loadAsync(file);
 
-  const jsonContent = await jsonFile.async("string");
-  const data = JSON.parse(jsonContent);
+    const jsonFile = loadedZip.file("course.json");
+    if (!jsonFile) throw new Error("Invalid package: course.json missing");
+
+    const jsonContent = await jsonFile.async("string");
+    data = JSON.parse(jsonContent);
+  }
 
   if (!data.course || !data.modules || !data.topics || !data.resources) {
     throw new Error("Invalid package format");
@@ -119,7 +127,7 @@ export const importCourseFromZip = async (file: File) => {
   };
 
   const restoreBase64Url = async (url: string) => {
-    if (url && url.startsWith('assets/')) {
+    if (url && url.startsWith('assets/') && loadedZip) {
       const filename = url.replace('assets/', '');
       const zipFile = loadedZip.file(`assets/${filename}`);
       if (zipFile) {
