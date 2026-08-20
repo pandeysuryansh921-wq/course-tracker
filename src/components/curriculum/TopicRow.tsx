@@ -102,9 +102,12 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   const handleScoreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const score = parseInt(scoreInput);
-    if (!isNaN(score) && score >= 0) {
+    const maxScore = topic.quizMaxScore || 100;
+    if (!isNaN(score) && score >= 0 && score <= maxScore) {
       submitTopicScore(topic.id, score);
       setScoreInput('');
+    } else {
+      alert(`Score must be between 0 and ${maxScore}`);
     }
   };
 
@@ -333,6 +336,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                       <Input 
                         type="number"
                         min="0"
+                        max={topic.quizMaxScore || 100}
                         step="any"
                         placeholder="Score"
                         value={scoreInput}
