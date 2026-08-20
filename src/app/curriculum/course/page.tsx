@@ -182,7 +182,7 @@ function CourseDetailsContent() {
                   <Download className="w-4 h-4" />
                 </Button>
                 {isEditMode && (
-                  <Button variant="outline" size="sm" onClick={() => updateCourse(course.id, { syllabus: undefined })} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                  <Button variant="danger" size="sm" onClick={() => updateCourse(course.id, { syllabus: undefined })} className="text-red-500 hover:text-red-600 hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 )}
@@ -220,7 +220,7 @@ function CourseDetailsContent() {
                   <Download className="w-4 h-4" />
                 </Button>
                 {isEditMode && (
-                  <Button variant="outline" size="sm" onClick={() => updateCourse(course.id, { curriculum: undefined })} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                  <Button variant="danger" size="sm" onClick={() => updateCourse(course.id, { curriculum: undefined })} className="text-red-500 hover:text-red-600 hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 )}
