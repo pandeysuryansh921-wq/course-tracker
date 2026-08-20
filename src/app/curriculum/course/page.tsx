@@ -10,9 +10,10 @@ import ModuleAccordion from '@/components/curriculum/ModuleAccordion';
 import GeminiGemCard from '@/components/curriculum/GeminiGemCard';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { ArrowLeft, Plus, Edit2, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, CheckCircle2, Loader2, FileText, Download, Trash2, Upload, FileSignature } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { Suspense } from 'react';
+import { downloadBase64File } from '@/lib/utils';
 
 function CourseDetailsContent() {
   const router = useRouter();
@@ -24,6 +25,11 @@ function CourseDetailsContent() {
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [isEditMode, setIsEditMode] = useState(false);
+  
+  const [isUploadingSyllabus, setIsUploadingSyllabus] = useState(false);
+  const [isUploadingCurriculum, setIsUploadingCurriculum] = useState(false);
+  
+  const updateCourse = useCurriculumStore((state) => state.updateCourse);
 
   // ── Stable selectors ──────────────────────────────────────────────
   // Select raw arrays from the store — these are referentially stable
@@ -78,6 +84,31 @@ function CourseDetailsContent() {
     setIsAddTopicModalOpen(true);
   };
 
+  const handleFileUpload = (type: 'syllabus' | 'curriculum', e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string;
+        let fileType: any = 'document';
+        if (file.type.startsWith('image/')) fileType = 'image';
+        else if (file.type === 'application/pdf') fileType = 'pdf';
+
+        updateCourse(courseId!, {
+          [type]: {
+            id: Date.now().toString(),
+            name: file.name,
+            type: fileType,
+            url: base64String
+          }
+        });
+        if (type === 'syllabus') setIsUploadingSyllabus(false);
+        if (type === 'curriculum') setIsUploadingCurriculum(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6 lg:p-8">
       <Link
@@ -124,6 +155,84 @@ function CourseDetailsContent() {
               </span>
             </div>
             <ProgressBar value={progress} className="mb-2" />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* Syllabus Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg">
+              <FileSignature className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Course Syllabus</h3>
+              {course.syllabus ? (
+                <p className="text-xs text-slate-500 truncate max-w-[150px] sm:max-w-[200px]">{course.syllabus.name}</p>
+              ) : (
+                <p className="text-xs text-slate-500">No syllabus attached</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {course.syllabus ? (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => downloadBase64File(course.syllabus!.url, course.syllabus!.name)}>
+                  <Download className="w-4 h-4" />
+                </Button>
+                {isEditMode && (
+                  <Button variant="outline" size="sm" onClick={() => updateCourse(course.id, { syllabus: undefined })} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </>
+            ) : isEditMode && (
+              <label className="cursor-pointer">
+                <Button variant="secondary" size="sm" className="pointer-events-none">
+                  <Upload className="w-4 h-4 mr-2" /> Upload
+                </Button>
+                <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => handleFileUpload('syllabus', e)} />
+              </label>
+            )}
+          </div>
+        </div>
+
+        {/* Curriculum Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Curriculum Guide</h3>
+              {course.curriculum ? (
+                <p className="text-xs text-slate-500 truncate max-w-[150px] sm:max-w-[200px]">{course.curriculum.name}</p>
+              ) : (
+                <p className="text-xs text-slate-500">No curriculum attached</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {course.curriculum ? (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => downloadBase64File(course.curriculum!.url, course.curriculum!.name)}>
+                  <Download className="w-4 h-4" />
+                </Button>
+                {isEditMode && (
+                  <Button variant="outline" size="sm" onClick={() => updateCourse(course.id, { curriculum: undefined })} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </>
+            ) : isEditMode && (
+              <label className="cursor-pointer">
+                <Button variant="secondary" size="sm" className="pointer-events-none">
+                  <Upload className="w-4 h-4 mr-2" /> Upload
+                </Button>
+                <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => handleFileUpload('curriculum', e)} />
+              </label>
+            )}
           </div>
         </div>
       </div>

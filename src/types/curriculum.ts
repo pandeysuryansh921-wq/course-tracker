@@ -36,6 +36,8 @@ export interface Course {
   color: string;
   icon: string;
   gemLinks?: GemLink[];
+  syllabus?: AssignmentFile;
+  curriculum?: AssignmentFile;
   targetCompletionDate?: Date;
   createdAt: Date;
   updatedAt: Date;
