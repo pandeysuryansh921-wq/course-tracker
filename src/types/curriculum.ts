@@ -59,6 +59,7 @@ export interface Topic {
   moduleId: string;
   courseId: string;
   name: string;
+  description?: string;
   status: TopicStatus;
   isCompleted: boolean;
   isMastered?: boolean;

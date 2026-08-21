@@ -282,6 +282,23 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
 
       {isExpanded && (
         <div className="pl-12 pr-4 pb-6 pt-2 space-y-4">
+          {/* About / Description Section */}
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">About this Topic</h4>
+            {isEditMode ? (
+              <TextArea
+                value={topic.description || ''}
+                onChange={(e) => updateTopic(topic.id, { description: e.target.value })}
+                placeholder="Write what to do in this topic, learning objectives, or instructions..."
+                className="w-full text-sm min-h-[80px]"
+              />
+            ) : (
+              <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                {topic.description || "No description provided."}
+              </p>
+            )}
+          </div>
+
           {/* Quiz Section */}
           <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
