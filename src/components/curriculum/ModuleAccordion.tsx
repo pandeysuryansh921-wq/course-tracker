@@ -102,7 +102,7 @@ export default function ModuleAccordion({ module, topics, isExpanded, onToggle, 
                     <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">{project.description}</p>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      {project.requirements && project.requirements.length > 0 && (
+                      {project.requirements && Array.isArray(project.requirements) && project.requirements.length > 0 && (
                         <div>
                           <h6 className="font-semibold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-2">Requirements</h6>
                           <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400 text-xs">
@@ -110,7 +110,7 @@ export default function ModuleAccordion({ module, topics, isExpanded, onToggle, 
                           </ul>
                         </div>
                       )}
-                      {project.deliverables && project.deliverables.length > 0 && (
+                      {project.deliverables && Array.isArray(project.deliverables) && project.deliverables.length > 0 && (
                         <div>
                           <h6 className="font-semibold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-2">Deliverables</h6>
                           <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400 text-xs">
@@ -119,6 +119,23 @@ export default function ModuleAccordion({ module, topics, isExpanded, onToggle, 
                         </div>
                       )}
                     </div>
+
+                    {project.milestones && Array.isArray(project.milestones) && project.milestones.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-violet-100 dark:border-violet-800/30">
+                        <h6 className="font-semibold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider mb-2">Milestones</h6>
+                        <div className="space-y-2">
+                          {project.milestones.map((ms) => (
+                            <div key={ms.id} className="bg-slate-50 dark:bg-slate-700/50 p-2 rounded text-xs flex justify-between items-start">
+                              <div>
+                                <span className="font-medium text-slate-900 dark:text-white block">{ms.title}</span>
+                                <span className="text-slate-500 dark:text-slate-400">{ms.description}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">{ms.estimatedHours}h</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

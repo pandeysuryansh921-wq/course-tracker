@@ -60,6 +60,13 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
           </button>
         )}
       </div>
+      
+      {resource.scopeInstructions && (
+        <div className="ml-7 mr-2 p-2 bg-blue-50 dark:bg-blue-900/10 border-l-2 border-blue-400 dark:border-blue-700 rounded-r-md">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 block mb-1">Study Scope</span>
+          <p className="text-xs text-blue-900 dark:text-blue-200">{resource.scopeInstructions}</p>
+        </div>
+      )}
 
       {isInline && isViewing && (
         <div className="mt-2 mb-4 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">

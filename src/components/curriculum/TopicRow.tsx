@@ -58,7 +58,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   );
 
   const practices = React.useMemo(
-    () => allPractices.filter(p => p.topicId === topic.id).sort((a, b) => a.order - b.order),
+    () => allPractices.filter(p => p.topicId === topic.id).sort((a, b) => (a.order || 0) - (b.order || 0)),
     [allPractices, topic.id]
   );
 
@@ -304,7 +304,34 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
               </p>
             )}
 
-            {topic.learningOutcomes && topic.learningOutcomes.length > 0 && (
+            {topic.prerequisites && Array.isArray(topic.prerequisites) && topic.prerequisites.length > 0 && (
+              <div className="mt-4 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-lg border border-amber-200 dark:border-amber-800/30">
+                <h5 className="text-xs font-semibold text-amber-800 dark:text-amber-500 mb-1 flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wider">Prerequisites</span>
+                </h5>
+                <p className="text-xs text-amber-700 dark:text-amber-400">You should complete these topics first:</p>
+                <ul className="list-disc pl-5 text-xs text-amber-700 dark:text-amber-400 space-y-0.5 mt-1">
+                  {topic.prerequisites.map((prereq, idx) => (
+                    <li key={idx}>{prereq}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {topic.medicalApplications && Array.isArray(topic.medicalApplications) && topic.medicalApplications.length > 0 && (
+              <div className="mt-4">
+                <h5 className="text-xs font-semibold text-rose-600 dark:text-rose-400 mb-2 uppercase tracking-wider flex items-center gap-1">
+                  <span className="text-[10px]">Medical Applications</span>
+                </h5>
+                <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                  {topic.medicalApplications.map((app, idx) => (
+                    <li key={idx}>{app}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {topic.learningOutcomes && Array.isArray(topic.learningOutcomes) && topic.learningOutcomes.length > 0 && (
               <div className="mt-4">
                 <h5 className="text-xs font-semibold text-slate-900 dark:text-white mb-2 uppercase tracking-wider text-slate-500">Learning Outcomes</h5>
                 <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
@@ -317,7 +344,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
             
             {topic.scope && (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topic.scope.core && topic.scope.core.length > 0 && (
+                {topic.scope.core && Array.isArray(topic.scope.core) && topic.scope.core.length > 0 && (
                   <div>
                     <h5 className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 uppercase tracking-wider">Core Scope</h5>
                     <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
@@ -325,7 +352,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     </ul>
                   </div>
                 )}
-                {topic.scope.important && topic.scope.important.length > 0 && (
+                {topic.scope.important && Array.isArray(topic.scope.important) && topic.scope.important.length > 0 && (
                   <div>
                     <h5 className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-2 uppercase tracking-wider">Important</h5>
                     <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
@@ -333,7 +360,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     </ul>
                   </div>
                 )}
-                {topic.scope.optional && topic.scope.optional.length > 0 && (
+                {topic.scope.optional && Array.isArray(topic.scope.optional) && topic.scope.optional.length > 0 && (
                   <div>
                     <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Optional</h5>
                     <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1 opacity-80">
@@ -341,7 +368,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     </ul>
                   </div>
                 )}
-                {topic.scope.skip && topic.scope.skip.length > 0 && (
+                {topic.scope.skip && Array.isArray(topic.scope.skip) && topic.scope.skip.length > 0 && (
                   <div>
                     <h5 className="text-xs font-semibold text-red-500 dark:text-red-400 mb-2 uppercase tracking-wider">Skip</h5>
                     <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1 opacity-80">
@@ -384,7 +411,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">{p.description}</p>
                     
-                    {p.tasks && p.tasks.length > 0 && (
+                    {p.tasks && Array.isArray(p.tasks) && p.tasks.length > 0 && (
                       <div className="mb-3">
                         <h6 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tasks</h6>
                         <ul className="text-xs text-slate-700 dark:text-slate-300 list-disc pl-4 space-y-1">
@@ -394,7 +421,9 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     )}
                     
                     <div className="mt-auto pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-500 font-medium">Estimated: {p.estimatedMinutes || 30} mins</span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Estimated: {p.estimatedHours ? `${p.estimatedHours}h` : `${p.estimatedMinutes || 30}m`}
+                      </span>
                       {p.type && <span className="text-[10px] font-medium uppercase text-violet-600">{p.type}</span>}
                     </div>
                   </div>
@@ -596,6 +625,17 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                         )}
                       </div>
                       
+                      {assignment.description && <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 mb-2">{assignment.description}</p>}
+                      
+                      {assignment.tasks && Array.isArray(assignment.tasks) && assignment.tasks.length > 0 && (
+                        <div className="mt-2 mb-2">
+                          <h6 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tasks</h6>
+                          <ul className="text-xs text-slate-700 dark:text-slate-300 list-disc pl-4 space-y-1">
+                            {assignment.tasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
                       {assignment.file && (
                         <div className="mt-2 flex items-center gap-2">
                           {assignment.file.type === 'link' ? (
@@ -637,7 +677,13 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                       </button>
                     ) : (
                       <div className="w-full sm:w-auto mt-3 sm:mt-0 sm:ml-4 shrink-0">
-                        {!assignment.isSubmitted ? (
+                        {assignment.submissionType === 'none' ? (
+                          <div className="flex items-center justify-end h-full">
+                            <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => updateAssignment(topic.id, assignment.id, { isSubmitted: true, submittedAt: new Date().toISOString() })}>
+                              Mark as Done
+                            </Button>
+                          </div>
+                        ) : !assignment.isSubmitted ? (
                            <div className="flex flex-col gap-2">
                              <div className="flex gap-3 px-1">
                                 <button type="button" onClick={() => setSubmissionSource(prev => ({...prev, [assignment.id]: 'link'}))} className={`text-xs pb-1 border-b ${(!submissionSource[assignment.id] || submissionSource[assignment.id] === 'link') ? 'border-violet-600 text-violet-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Paste Link</button>

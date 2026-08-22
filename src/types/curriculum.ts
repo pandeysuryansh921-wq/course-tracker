@@ -31,12 +31,15 @@ export interface Assignment {
   estimatedHours?: number;
   order?: number;
   objective?: string;
+  tasks?: string[];
   requirements?: string[];
   skillsTested?: string[];
   deliverables?: string[];
+  hints?: string[];
   evaluationCriteria?: Record<string, number>;
   passScore?: number;
   masteryScore?: number;
+  submissionType?: string;
   file?: AssignmentFile;
   isSubmitted: boolean;   
   submissionFile?: AssignmentFile;
@@ -49,14 +52,15 @@ export interface Practice {
   moduleId: string;
   courseId: string;
   title: string;
-  description: string;
-  type: string;
-  difficulty: string;
-  estimatedMinutes: number;
-  order: number;
-  objective: string;
-  tasks: string[];
-  skillsTested: string[];
+  description?: string;
+  type?: string;
+  difficulty?: string;
+  estimatedMinutes?: number;
+  estimatedHours?: number;
+  order?: number;
+  objective?: string;
+  tasks?: string[];
+  skillsTested?: string[];
   hints?: string[];
   deliverable?: string;
   solutionPolicy?: string;
@@ -76,14 +80,23 @@ export interface Project {
   difficulty: string;
   estimatedHours: number;
   order: number;
+  objective?: string;
   requiredTopics?: string[];
   requirements: string[];
+  milestones?: {
+    id: string;
+    title: string;
+    description: string;
+    estimatedHours: number;
+    deliverables: string[];
+  }[];
   deliverables: string[];
   evaluationCriteria?: Record<string, number>;
   passScore?: number;
   masteryScore?: number;
   isSubmitted?: boolean;
   submissionLink?: string;
+  medicalDomain?: string;
 }
 
 export interface Course {
@@ -96,7 +109,12 @@ export interface Course {
   syllabus?: AssignmentFile;
   curriculum?: AssignmentFile;
   targetCompletionDate?: Date;
-  assessment?: any; // V2 assessment metadata
+  assessment?: {
+    practiceWeight?: number;
+    assignmentWeight?: number;
+    quizWeight?: number;
+    projectWeight?: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -127,8 +145,10 @@ export interface Topic {
   };
   learningOutcomes?: string[];
   difficulty?: string;
+  learningLevel?: string;
   estimatedHours?: number;
   prerequisites?: string[];
+  medicalApplications?: string[];
   completionCriteria?: {
     minimum?: string[];
     mastery?: string[];
@@ -157,7 +177,9 @@ export interface Resource {
   freeStatus?: string;
   estimatedHours?: number;
   description?: string;
+  scopeInstructions?: string;
   required?: boolean;
+  order?: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -14,10 +14,10 @@ A privacy-focused, local-first web application that helps self-learners structur
 - **Three-level hierarchy** — Courses → Modules → Topics/Lessons (e.g. *"Computer Science > Data Structures > Trees"*)
 - **Status tracking** per topic: Not Started · In Progress · Needs Review · Completed · Mastered
 - **Dynamic Mastery Logic**: Enter custom max scores for your quizzes (e.g. 18 / 20). Scoring $\ge 85\%$ marks a topic as Mastered 🌟, while $70\%-84\%$ marks it as Completed ✅. 
-- **Resource links** attached to each topic (videos, PDFs, articles, textbooks)
-- **Per-topic notes** with inline editing
-- **Progress bars** at every level (course, module) with real-time calculations
-- **Course Import/Export**: Backup entire courses (including structure, files, and assignments) to a `.zip` file, and share or import them seamlessly.
+- **Resource links** attached to each topic (videos, PDFs, articles, textbooks) with specific **Study Scopes** to prevent overwhelm.
+- **Per-topic notes** and structured **Study Plans** with inline editing.
+- **Practice Exercises & Capstone Projects**: Dedicated hierarchical support for low-stakes practice routines (at the topic level) and major capstone projects (at the module level) with nested milestones.
+- **Course Import/Export (V2 Schema)**: Backup entire courses (including structure, files, assignments, and deep metadata) to a `.zip` file, and share or import them seamlessly. The app natively supports complex 4.5-year university-style curricula via the V2 JSON spec.
 
 ### 🧠 Smart Flashcards (Spaced Repetition)
 - **SuperMemo-2 Algorithm**: Automatically schedules flashcard reviews based on your recall performance.
