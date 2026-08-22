@@ -17,6 +17,8 @@ export const exportCourseToZip = async (courseId: string) => {
   const topics = await db.topics.where('courseId').equals(courseId).toArray();
   const topicIds = topics.map(t => t.id);
   const resources = await db.resources.where('topicId').anyOf(topicIds).toArray();
+  const practices = await db.practices.where('courseId').equals(courseId).toArray();
+  const projects = await db.projects.where('courseId').equals(courseId).toArray();
 
   // 2. Clean data & extract base64 files
   const assetsFolder = zip.folder("assets");
@@ -74,11 +76,13 @@ export const exportCourseToZip = async (courseId: string) => {
   });
 
   const exportData = {
-    version: 1,
+    version: 2,
     course,
     modules,
     topics: cleanTopics,
-    resources: cleanResources
+    resources: cleanResources,
+    practice: practices,
+    projects: projects
   };
 
   // 3. Add JSON to zip
@@ -184,12 +188,48 @@ export const importCourseFromZip = async (file: File) => {
     };
   }));
 
+  const newPractices = data.practice ? data.practice.map((p: any) => ({
+    ...p,
+    id: getNewId(p.id),
+    topicId: getNewId(p.topicId),
+    moduleId: getNewId(p.moduleId),
+    courseId: getNewId(p.courseId),
+  })) : [];
+
+  const newProjects = data.projects ? data.projects.map((p: any) => ({
+    ...p,
+    id: getNewId(p.id),
+    moduleId: getNewId(p.moduleId),
+    courseId: getNewId(p.courseId),
+    requiredTopics: p.requiredTopics ? p.requiredTopics.map((tid: string) => getNewId(tid)) : undefined,
+  })) : [];
+
+  // Handle flat assignments array from V2 json if present
+  if (data.assignments && Array.isArray(data.assignments)) {
+    for (const a of data.assignments) {
+      const topicId = getNewId(a.topicId);
+      const targetTopic = newTopics.find(t => t.id === topicId);
+      if (targetTopic) {
+        if (!targetTopic.assignments) targetTopic.assignments = [];
+        targetTopic.assignments.push({
+          ...a,
+          id: getNewId(a.id),
+          topicId,
+          moduleId: getNewId(a.moduleId),
+          courseId: getNewId(a.courseId)
+        });
+      }
+    }
+  }
+
   // Save to database
-  await db.transaction('rw', db.courses, db.modules, db.topics, db.resources, async () => {
+  await db.transaction('rw', [db.courses, db.modules, db.topics, db.resources, db.practices, db.projects], async () => {
     await db.courses.add(newCourse);
     await db.modules.bulkAdd(newModules);
     await db.topics.bulkAdd(newTopics);
     await db.resources.bulkAdd(newResources);
+    if (newPractices.length) await db.practices.bulkAdd(newPractices);
+    if (newProjects.length) await db.projects.bulkAdd(newProjects);
   });
 
   // Re-initialize store so UI updates

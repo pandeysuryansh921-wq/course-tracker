@@ -41,6 +41,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   const [submissionFiles, setSubmissionFiles] = React.useState<Record<string, File | null>>({});
 
   const allResources = useCurriculumStore(state => state.resources);
+  const allPractices = useCurriculumStore(state => state.practices);
   const updateTopicStatus = useCurriculumStore(state => state.updateTopicStatus);
   const toggleTopicCompletion = useCurriculumStore(state => state.toggleTopicCompletion);
   const updateTopic = useCurriculumStore(state => state.updateTopic);
@@ -54,6 +55,11 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   const resources = React.useMemo(
     () => allResources.filter(r => r.topicId === topic.id),
     [allResources, topic.id]
+  );
+
+  const practices = React.useMemo(
+    () => allPractices.filter(p => p.topicId === topic.id).sort((a, b) => a.order - b.order),
+    [allPractices, topic.id]
   );
 
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -297,7 +303,105 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                 {topic.description || "No description provided."}
               </p>
             )}
+
+            {topic.learningOutcomes && topic.learningOutcomes.length > 0 && (
+              <div className="mt-4">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-white mb-2 uppercase tracking-wider text-slate-500">Learning Outcomes</h5>
+                <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                  {topic.learningOutcomes.map((lo, idx) => (
+                    <li key={idx}>{lo}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {topic.scope && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {topic.scope.core && topic.scope.core.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 uppercase tracking-wider">Core Scope</h5>
+                    <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                      {topic.scope.core.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {topic.scope.important && topic.scope.important.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-2 uppercase tracking-wider">Important</h5>
+                    <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                      {topic.scope.important.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {topic.scope.optional && topic.scope.optional.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Optional</h5>
+                    <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1 opacity-80">
+                      {topic.scope.optional.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {topic.scope.skip && topic.scope.skip.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-red-500 dark:text-red-400 mb-2 uppercase tracking-wider">Skip</h5>
+                    <ul className="list-disc pl-5 text-sm text-slate-700 dark:text-slate-300 space-y-1 opacity-80">
+                      {topic.scope.skip.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {topic.studyPlan && Object.keys(topic.studyPlan).length > 0 && (
+              <div className="mt-6">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-white mb-3 uppercase tracking-wider text-slate-500">Study Plan</h5>
+                <div className="space-y-3 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
+                  {Object.entries(topic.studyPlan).map(([step, desc], idx) => (
+                    <div key={step} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-100 dark:bg-slate-800 text-slate-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+                        <span className="text-xs font-bold">{idx + 1}</span>
+                      </div>
+                      <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Practice Section */}
+          {practices.length > 0 && (
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Practice Exercises</h4>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {practices.map(p => (
+                  <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col h-full">
+                    <div className="flex justify-between items-start mb-2">
+                      <h5 className="font-semibold text-sm text-slate-900 dark:text-white flex-1">{p.title}</h5>
+                      {p.difficulty && <Badge className="ml-2 capitalize text-[10px] py-0 shrink-0 bg-slate-100 text-slate-600">{p.difficulty}</Badge>}
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">{p.description}</p>
+                    
+                    {p.tasks && p.tasks.length > 0 && (
+                      <div className="mb-3">
+                        <h6 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tasks</h6>
+                        <ul className="text-xs text-slate-700 dark:text-slate-300 list-disc pl-4 space-y-1">
+                          {p.tasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    <div className="mt-auto pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-700">
+                      <span className="text-[10px] text-slate-500 font-medium">Estimated: {p.estimatedMinutes || 30} mins</span>
+                      {p.type && <span className="text-[10px] font-medium uppercase text-violet-600">{p.type}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Quiz Section */}
           <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border border-slate-200 dark:border-slate-800">

@@ -21,12 +21,69 @@ export interface AssignmentFile {
 
 export interface Assignment {
   id: string;
+  topicId?: string; // New in V2 for relational linking
+  moduleId?: string; // New in V2
+  courseId?: string; // New in V2
   title: string;
   description?: string;
+  type?: string;
+  difficulty?: string;
+  estimatedHours?: number;
+  order?: number;
+  objective?: string;
+  requirements?: string[];
+  skillsTested?: string[];
+  deliverables?: string[];
+  evaluationCriteria?: Record<string, number>;
+  passScore?: number;
+  masteryScore?: number;
   file?: AssignmentFile;
   isSubmitted: boolean;   
   submissionFile?: AssignmentFile;
   submittedAt?: string;
+}
+
+export interface Practice {
+  id: string;
+  topicId: string;
+  moduleId: string;
+  courseId: string;
+  title: string;
+  description: string;
+  type: string;
+  difficulty: string;
+  estimatedMinutes: number;
+  order: number;
+  objective: string;
+  tasks: string[];
+  skillsTested: string[];
+  hints?: string[];
+  deliverable?: string;
+  solutionPolicy?: string;
+  completionCriteria?: {
+    minimum?: string;
+    mastery?: string;
+  };
+}
+
+export interface Project {
+  id: string;
+  moduleId: string;
+  courseId: string;
+  title: string;
+  description: string;
+  type: string;
+  difficulty: string;
+  estimatedHours: number;
+  order: number;
+  requiredTopics?: string[];
+  requirements: string[];
+  deliverables: string[];
+  evaluationCriteria?: Record<string, number>;
+  passScore?: number;
+  masteryScore?: number;
+  isSubmitted?: boolean;
+  submissionLink?: string;
 }
 
 export interface Course {
@@ -39,6 +96,7 @@ export interface Course {
   syllabus?: AssignmentFile;
   curriculum?: AssignmentFile;
   targetCompletionDate?: Date;
+  assessment?: any; // V2 assessment metadata
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,6 +118,21 @@ export interface Topic {
   courseId: string;
   name: string;
   description?: string;
+  studyPlan?: Record<string, string>;
+  scope?: {
+    core?: string[];
+    important?: string[];
+    optional?: string[];
+    skip?: string[];
+  };
+  learningOutcomes?: string[];
+  difficulty?: string;
+  estimatedHours?: number;
+  prerequisites?: string[];
+  completionCriteria?: {
+    minimum?: string[];
+    mastery?: string[];
+  };
   status: TopicStatus;
   isCompleted: boolean;
   isMastered?: boolean;
@@ -80,7 +153,11 @@ export interface Resource {
   topicId: string;
   title: string;
   url: string;
-  type: ResourceType;
+  type: ResourceType | string;
+  freeStatus?: string;
+  estimatedHours?: number;
+  description?: string;
+  required?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

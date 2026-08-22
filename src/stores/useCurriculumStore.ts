@@ -9,7 +9,9 @@ import type {
   TopicStatus,
   Assignment,
   Flashcard,
-  GemLink
+  GemLink,
+  Practice,
+  Project
 } from '@/types/curriculum';
 import { generateId } from '@/lib/utils';
 
@@ -19,6 +21,8 @@ interface CurriculumState {
   topics: Topic[];
   resources: Resource[];
   flashcards: Flashcard[];
+  practices: Practice[];
+  projects: Project[];
   isLoading: boolean;
   error: string | null;
   isInitialized: boolean;
@@ -60,7 +64,7 @@ interface CurriculumActions {
   deleteAssignment: (topicId: string, assignmentId: string) => Promise<void>;
 
   // Resource actions
-  addResource: (topicId: string, title: string, url: string, type: ResourceType) => Promise<Resource>;
+  addResource: (topicId: string, title: string, url: string, type: ResourceType | string) => Promise<Resource>;
   deleteResource: (id: string) => Promise<void>;
 
   // Flashcard actions
@@ -83,6 +87,8 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
   topics: [],
   resources: [],
   flashcards: [],
+  practices: [],
+  projects: [],
   isLoading: false,
   error: null,
   isInitialized: false,
@@ -96,8 +102,10 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
       const topics = await db.topics.toArray();
       const resources = await db.resources.toArray();
       const flashcards = await db.flashcards.toArray();
+      const practices = await db.practices.toArray();
+      const projects = await db.projects.toArray();
       
-      set({ courses, modules, topics, resources, flashcards, isInitialized: true });
+      set({ courses, modules, topics, resources, flashcards, practices, projects, isInitialized: true });
     } catch (error) {
       console.error("Failed to initialize curriculum store:", error);
       set({ error: (error as Error).message });
