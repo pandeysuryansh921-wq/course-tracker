@@ -84,6 +84,15 @@ function CourseDetailsContent() {
     setIsAddTopicModalOpen(true);
   };
 
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return '';
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   const handleFileUpload = (type: 'syllabus' | 'curriculum', e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -99,13 +108,17 @@ function CourseDetailsContent() {
             id: Date.now().toString(),
             name: file.name,
             type: fileType,
-            url: base64String
+            url: base64String,
+            size: file.size
           }
         });
         if (type === 'syllabus') setIsUploadingSyllabus(false);
         if (type === 'curriculum') setIsUploadingCurriculum(false);
       };
       reader.readAsDataURL(file);
+    } else {
+      if (type === 'syllabus') setIsUploadingSyllabus(false);
+      if (type === 'curriculum') setIsUploadingCurriculum(false);
     }
   };
 
@@ -169,13 +182,16 @@ function CourseDetailsContent() {
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white">Course Syllabus</h3>
               {course.syllabus ? (
-                <p className="text-xs text-slate-500 truncate max-w-[150px] sm:max-w-[200px]">{course.syllabus.name}</p>
+                <div>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[150px] sm:max-w-[200px]">{course.syllabus.name}</p>
+                  {course.syllabus.size && <p className="text-[10px] text-slate-500">{formatBytes(course.syllabus.size)}</p>}
+                </div>
               ) : (
                 <p className="text-xs text-slate-500">No syllabus attached</p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
             {course.syllabus ? (
               <>
                 <Button variant="secondary" size="sm" onClick={() => downloadBase64File(course.syllabus!.url, course.syllabus!.name)}>
@@ -188,12 +204,12 @@ function CourseDetailsContent() {
                 )}
               </>
             ) : isEditMode && (
-              <label className="cursor-pointer">
-                <Button variant="secondary" size="sm" className="pointer-events-none">
-                  <Upload className="w-4 h-4 mr-2" /> Upload
-                </Button>
-                <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => handleFileUpload('syllabus', e)} />
-              </label>
+              <div>
+                <input id="upload-syllabus" type="file" className="hidden" accept=".pdf,.doc,.docx,.txt" onChange={(e) => { setIsUploadingSyllabus(true); handleFileUpload('syllabus', e); }} />
+                <label htmlFor="upload-syllabus" className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-3 cursor-pointer bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700">
+                  {isUploadingSyllabus ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...</> : <><Upload className="w-4 h-4 mr-2" /> Upload</>}
+                </label>
+              </div>
             )}
           </div>
         </div>
@@ -207,13 +223,16 @@ function CourseDetailsContent() {
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white">Curriculum Guide</h3>
               {course.curriculum ? (
-                <p className="text-xs text-slate-500 truncate max-w-[150px] sm:max-w-[200px]">{course.curriculum.name}</p>
+                <div>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[150px] sm:max-w-[200px]">{course.curriculum.name}</p>
+                  {course.curriculum.size && <p className="text-[10px] text-slate-500">{formatBytes(course.curriculum.size)}</p>}
+                </div>
               ) : (
                 <p className="text-xs text-slate-500">No curriculum attached</p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
             {course.curriculum ? (
               <>
                 <Button variant="secondary" size="sm" onClick={() => downloadBase64File(course.curriculum!.url, course.curriculum!.name)}>
@@ -226,12 +245,12 @@ function CourseDetailsContent() {
                 )}
               </>
             ) : isEditMode && (
-              <label className="cursor-pointer">
-                <Button variant="secondary" size="sm" className="pointer-events-none">
-                  <Upload className="w-4 h-4 mr-2" /> Upload
-                </Button>
-                <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => handleFileUpload('curriculum', e)} />
-              </label>
+              <div>
+                <input id="upload-curriculum" type="file" className="hidden" accept=".pdf,.doc,.docx,.txt" onChange={(e) => { setIsUploadingCurriculum(true); handleFileUpload('curriculum', e); }} />
+                <label htmlFor="upload-curriculum" className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-3 cursor-pointer bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700">
+                  {isUploadingCurriculum ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...</> : <><Upload className="w-4 h-4 mr-2" /> Upload</>}
+                </label>
+              </div>
             )}
           </div>
         </div>

@@ -17,6 +17,7 @@ export interface AssignmentFile {
   name: string;
   type: FileAttachmentType;
   url: string; // Base64 string, Blob URL, or stored file path
+  size?: number;
 }
 
 export interface Assignment {
