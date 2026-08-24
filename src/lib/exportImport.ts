@@ -161,6 +161,10 @@ export const importCourseFromZip = async (file: File) => {
       id: getNewId(t.id),
       moduleId: getNewId(t.moduleId),
       courseId: getNewId(t.courseId),
+      prerequisites: typeof t.prerequisites === 'string' ? [t.prerequisites] : t.prerequisites,
+      medicalApplications: typeof t.medicalApplications === 'string' ? [t.medicalApplications] : t.medicalApplications,
+      learningOutcomes: typeof t.learningOutcomes === 'string' ? [t.learningOutcomes] : t.learningOutcomes,
+      skills: typeof t.skills === 'string' ? [t.skills] : t.skills,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -217,6 +221,24 @@ export const importCourseFromZip = async (file: File) => {
           topicId,
           moduleId: getNewId(a.moduleId),
           courseId: getNewId(a.courseId)
+        });
+      }
+    }
+  }
+
+  // Handle single assignment from V4 json if present on topics
+  for (const t of data.topics) {
+    if (t.assignment && typeof t.assignment === 'object' && !Array.isArray(t.assignment)) {
+      const targetTopic = newTopics.find(nt => nt.id === getNewId(t.id));
+      if (targetTopic) {
+        if (!targetTopic.assignments) targetTopic.assignments = [];
+        targetTopic.assignments.push({
+          ...t.assignment,
+          id: getNewId(t.assignment.assignmentId || generateId()),
+          title: t.assignment.objective || t.assignment.deliverable || "Assignment",
+          topicId: targetTopic.id,
+          moduleId: targetTopic.moduleId,
+          courseId: targetTopic.courseId
         });
       }
     }

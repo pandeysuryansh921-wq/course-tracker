@@ -342,6 +342,19 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
               </div>
             )}
             
+            {topic.skills && Array.isArray(topic.skills) && topic.skills.length > 0 && (
+              <div className="mt-4">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-white mb-2 uppercase tracking-wider text-slate-500">Skills Acquired</h5>
+                <div className="flex flex-wrap gap-2">
+                  {topic.skills.map((skill: string, idx: number) => (
+                    <Badge key={idx} variant="default" className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
+                      {skill}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {topic.scope && (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 {topic.scope.core && Array.isArray(topic.scope.core) && topic.scope.core.length > 0 && (

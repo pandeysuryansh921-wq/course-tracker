@@ -165,6 +165,9 @@ export interface Topic {
   assignments?: Assignment[];
   nextReviewDate?: Date;
   notes: string;
+  skills?: string[];
+  assignment?: any;
+  quiz?: any;
   createdAt: Date;
   updatedAt: Date;
 }
