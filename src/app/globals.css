@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: 'Inter', sans-serif;
   --color-surface: var(--surface);
@@ -22,6 +24,7 @@
 }
 
 :root {
+  color-scheme: light;
   --surface: #f8fafc;
   --card: #ffffff;
   --border: #e2e8f0;
@@ -37,6 +40,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --surface: #0f172a;
   --card: #1e293b;
   --border: #334155;
