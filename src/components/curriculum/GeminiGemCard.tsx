@@ -1,14 +1,16 @@
 import React from 'react';
-import { ExternalLink, Sparkles } from 'lucide-react';
+import { ExternalLink, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 import { GemLink } from '@/types/curriculum';
 
 interface GeminiGemCardProps {
   gem: GemLink;
+  isEditMode?: boolean;
+  onDelete?: () => void;
 }
 
-export default function GeminiGemCard({ gem }: GeminiGemCardProps) {
+export default function GeminiGemCard({ gem, isEditMode, onDelete }: GeminiGemCardProps) {
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between overflow-hidden relative">
@@ -26,7 +28,7 @@ export default function GeminiGemCard({ gem }: GeminiGemCardProps) {
         </p>
       </div>
       
-      <div className="w-full md:w-auto relative z-10 shrink-0">
+      <div className="w-full md:w-auto relative z-10 shrink-0 flex flex-col sm:flex-row gap-3">
         <Button 
           onClick={() => window.open(gem.url, '_blank', 'noopener noreferrer')}
           className="w-full md:w-auto bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white border-0 shadow-md shadow-violet-500/20 py-6"
@@ -35,6 +37,15 @@ export default function GeminiGemCard({ gem }: GeminiGemCardProps) {
             Ask Course Gemini Gem <ExternalLink className="w-4 h-4 ml-2" />
           </span>
         </Button>
+        {isEditMode && onDelete && (
+          <Button
+            variant="danger"
+            onClick={onDelete}
+            className="w-full sm:w-auto bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 border-0"
+          >
+            <Trash2 className="w-4 h-4 mr-2" /> Remove Gem
+          </Button>
+        )}
       </div>
     </div>
   );

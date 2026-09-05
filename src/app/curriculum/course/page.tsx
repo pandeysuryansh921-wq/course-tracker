@@ -8,6 +8,7 @@ import AddModuleModal from '@/components/curriculum/AddModuleModal';
 import AddTopicModal from '@/components/curriculum/AddTopicModal';
 import ModuleAccordion from '@/components/curriculum/ModuleAccordion';
 import GeminiGemCard from '@/components/curriculum/GeminiGemCard';
+import AddGemLinkModal from '@/components/curriculum/AddGemLinkModal';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { ArrowLeft, Plus, Edit2, CheckCircle2, Loader2, FileText, Download, Trash2, Upload, FileSignature } from 'lucide-react';
@@ -22,6 +23,7 @@ function CourseDetailsContent() {
 
   const [isAddModuleModalOpen, setIsAddModuleModalOpen] = useState(false);
   const [isAddTopicModalOpen, setIsAddTopicModalOpen] = useState(false);
+  const [isAddGemLinkModalOpen, setIsAddGemLinkModalOpen] = useState(false);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [isEditMode, setIsEditMode] = useState(false);
@@ -82,6 +84,17 @@ function CourseDetailsContent() {
   const handleAddTopic = (moduleId: string) => {
     setSelectedModuleId(moduleId);
     setIsAddTopicModalOpen(true);
+  };
+
+  const handleAddGemLink = (gem: any) => {
+    if (!course) return;
+    const currentGems = course.gemLinks || [];
+    updateCourse(course.id, { gemLinks: [...currentGems, gem] });
+  };
+
+  const handleDeleteGemLink = (gemId: string) => {
+    if (!course || !course.gemLinks) return;
+    updateCourse(course.id, { gemLinks: course.gemLinks.filter((g: any) => g.id !== gemId) });
   };
 
   const formatBytes = (bytes: number) => {
@@ -256,15 +269,32 @@ function CourseDetailsContent() {
         </div>
       </div>
 
-      {course.gemLinks && course.gemLinks.length > 0 && (
+      {((course.gemLinks && course.gemLinks.length > 0) || isEditMode) && (
         <div className="mb-10">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
-            Gemini AI Tutors & Gems
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              Gemini AI Tutors & Gems
+            </h2>
+            {isEditMode && (
+              <Button size="sm" variant="secondary" onClick={() => setIsAddGemLinkModalOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Add Gem
+              </Button>
+            )}
+          </div>
           <div className="space-y-4">
-            {course.gemLinks.map(gem => (
-              <GeminiGemCard key={gem.id} gem={gem} />
+            {course.gemLinks?.map(gem => (
+              <GeminiGemCard 
+                key={gem.id} 
+                gem={gem} 
+                isEditMode={isEditMode} 
+                onDelete={() => handleDeleteGemLink(gem.id)} 
+              />
             ))}
+            {isEditMode && (!course.gemLinks || course.gemLinks.length === 0) && (
+              <div className="text-center p-6 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-slate-500">
+                No Gemini Gems added. Click "Add Gem" to include an AI tutor.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -345,12 +375,16 @@ function CourseDetailsContent() {
         onClose={() => setIsAddModuleModalOpen(false)}
         courseId={course.id}
       />
-      
       <AddTopicModal
         isOpen={isAddTopicModalOpen}
         onClose={() => setIsAddTopicModalOpen(false)}
         courseId={course.id}
-        moduleId={selectedModuleId}
+        moduleId={selectedModuleId || ''}
+      />
+      <AddGemLinkModal
+        isOpen={isAddGemLinkModalOpen}
+        onClose={() => setIsAddGemLinkModalOpen(false)}
+        onAdd={(gem) => handleAddGemLink(gem)}
       />
     </div>
   );
