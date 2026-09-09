@@ -2,13 +2,19 @@
 
 > ⚠️ **Note:** This application is currently **under development**. You can download the latest Android APK for testing here: [Download APK](./apk/degreetrack-quiz-debug.apk).
 
-A privacy-focused, local-first web application that helps self-learners structure their online degree curriculum, track study progress, and manage assignments and self-assessment scores.
+A privacy-focused, local-first web application that helps self-learners structure their online degree curriculum, track study progress, manage assignments, log study sessions, and self-assess using Gemini Gems.
 
-> **100% Offline & API-Free.** DegreeTrack uses IndexedDB for persistent storage. Everything runs locally in your browser—no accounts, no backend servers, and zero data leaving your device.
+> **100% Offline & API-Free.** DegreeTrack uses IndexedDB for persistent storage. Everything runs locally in your browser—no backend servers, and zero data leaving your device, except when explicitly using the Google Drive backup feature.
 
 ---
 
 ## ✨ Features
+
+### ☁️ Cloud Sync & Backups (New)
+- **Google Drive Integration**: Back up and restore your entire curriculum (including base64 files and metadata) seamlessly to your Google Drive AppData folder. Your data stays hidden and secured from the main drive interface.
+
+### 🤖 AI Study Assistants
+- **Gemini Gems Integration**: Attach links to personalized Google Gemini Gems or NotebookLM spaces directly to your courses. Jump instantly from your curriculum into an AI-powered tutor session specific to your current class.
 
 ### 📚 Curriculum & Progress Tracker
 - **Three-level hierarchy** — Courses → Modules → Topics/Lessons (e.g. *"Computer Science > Data Structures > Trees"*)
@@ -17,7 +23,7 @@ A privacy-focused, local-first web application that helps self-learners structur
 - **Resource links** attached to each topic (videos, PDFs, articles, textbooks) with specific **Study Scopes** to prevent overwhelm.
 - **Per-topic notes** and structured **Study Plans** with inline editing.
 - **Practice Exercises & Capstone Projects**: Dedicated hierarchical support for low-stakes practice routines (at the topic level) and major capstone projects (at the module level) with nested milestones.
-- **Course Import/Export (V2 Schema)**: Backup entire courses (including structure, files, assignments, and deep metadata) to a `.zip` file, and share or import them seamlessly. The app natively supports complex 4.5-year university-style curricula via the V2 JSON spec.
+- **Course Import/Export (V4 Schema)**: Backup entire courses (including structure, files, assignments, and deep metadata) to a `.zip` file, and share or import them seamlessly. The app natively supports complex 4.5-year university-style curricula via the V4 JSON spec.
 
 ### 🧠 Smart Flashcards (Spaced Repetition)
 - **SuperMemo-2 Algorithm**: Automatically schedules flashcard reviews based on your recall performance.
@@ -49,11 +55,10 @@ A privacy-focused, local-first web application that helps self-learners structur
 - **Due-for-review panel** on the dashboard
 
 ### 🎨 Design & UX
-- **Dark / Light mode** toggle with smooth transitions
+- **Dark / Light mode** toggle with smooth transitions (fully optimized for Tailwind v4 and respects OS color scheme matching).
 - **Glassmorphism** sidebar with backdrop blur
 - **Responsive layout**: collapsible sidebar on mobile with overlay
 - **Micro-animations**: hover effects, slide-in transitions, progress ring animation
-- **Custom scrollbar** styling
 
 ---
 
@@ -62,44 +67,12 @@ A privacy-focused, local-first web application that helps self-learners structur
 | Layer | Technology |
 |---|---|
 | **Framework** | [Next.js 16](https://nextjs.org) (App Router, TypeScript) |
+| **Mobile Build**| [Capacitor](https://capacitorjs.com/) (Android / iOS) |
 | **Styling** | [Tailwind CSS v4](https://tailwindcss.com) |
 | **Icons** | [Lucide React](https://lucide.dev) |
 | **State Management** | [Zustand](https://zustand-demo.pmnd.rs) |
 | **Local Database** | [Dexie.js](https://dexie.org) (IndexedDB wrapper) |
 | **Charts** | [Recharts](https://recharts.org) |
-| **Utilities** | date-fns, uuid |
-
----
-
-## 📂 Project Structure
-
-\`\`\`
-src/
-├── app/                    # Next.js App Router pages
-│   ├── analytics/          # Analytics page
-│   ├── curriculum/         # Curriculum list + [courseId] detail page
-│   ├── dashboard/          # Dashboard overview page
-│   ├── journal/            # Study journal & Pomodoro timer page
-│   ├── globals.css         # Design tokens, animations, scrollbar
-│   └── layout.tsx          # Root layout (sidebar, header, theme)
-├── components/
-│   ├── analytics/          # PerformanceChart, StudyTimeChart, WeakSpotList
-│   ├── curriculum/         # CourseCard, ModuleAccordion, TopicRow, modals
-│   ├── dashboard/          # ProgressRing, StatsCard, RecentActivity
-│   ├── journal/            # PomodoroTimer, SessionLog
-│   ├── layout/             # Sidebar, Header, ThemeProvider, AppInitializer
-│   └── ui/                 # Badge, Button, Input, Modal, ProgressBar, etc.
-├── lib/
-│   ├── db.ts               # Dexie database schema (IndexedDB)
-│   └── utils.ts            # Shared helpers (ID generation, formatting)
-├── stores/
-│   ├── useCurriculumStore  # Courses, modules, topics, resources
-│   ├── useThemeStore       # Dark/light mode persistence
-│   └── useTimerStore       # Pomodoro/stopwatch state + session logging
-└── types/
-    ├── curriculum.ts       # Course, Module, Topic, Resource, Assignment interfaces
-    └── journal.ts          # StudySession, TimerConfig interfaces
-\`\`\`
 
 ---
 
@@ -108,63 +81,61 @@ src/
 ### Prerequisites
 
 - **Node.js** ≥ 18
+- **Android Studio** (for APK generation)
 
 ### Installation
 
-\`\`\`bash
+```bash
 # Clone the repository
 git clone <repo-url>
 cd degreetrack-quiz
 
 # Install dependencies
 npm install
-\`\`\`
+```
 
 ### Development
 
-\`\`\`bash
+```bash
 npm run dev
-\`\`\`
+```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Production Build & Vercel Deployment
 
-The application is completely static and fully compatible with **Vercel**. Since there are no API dependencies or environment variables required, you can deploy it instantly:
+The web application is completely static and fully compatible with **Vercel**:
 
-\`\`\`bash
+```bash
 npm run build
 npm start
-\`\`\`
+```
 
----
+### Capacitor Android Build
 
-## 🗺️ App Routes
-
-| Route | Description |
-|---|---|
-| \`/\` | Redirects to Dashboard |
-| \`/dashboard\` | Overview with progress ring, stats, review queue, quick actions |
-| \`/curriculum\` | Course list with progress bars |
-| \`/curriculum/[courseId]\` | Course detail: modules, topics, resources, notes |
-| \`/journal\` | Pomodoro timer, stopwatch, session history |
-| \`/analytics\` | Performance charts, study time, weak spot analysis |
+```bash
+npm run build
+npx cap sync android
+cd android
+./gradlew assembleDebug
+```
+The APK will be output in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ---
 
 ## 🔒 Privacy
 
-- **100% Offline** — all curriculum, assignment files, scores, and study sessions are stored securely in your browser's IndexedDB.
-- **No user accounts** — no sign-up, no tracking.
-- **No APIs** — completely self-controlled and independent.
+- **100% Offline by Default** — all curriculum, assignment files, scores, and study sessions are stored securely in your browser's IndexedDB.
+- **Google Drive Backups** — You have the *option* to authorize Google Drive sync to back up your database.
+- **No APIs / No Tracking** — completely self-controlled and independent.
 
 ---
 
 ## 🛠️ Development Notes
 
-- **TypeScript strict mode** is enabled (\`noImplicitAny: false\` for flexibility)
-- **Zustand stores** hydrate from IndexedDB on app initialization via \`AppInitializer\`
-- **Tailwind v4** uses the \`@theme inline\` directive in \`globals.css\` for design tokens
+- **TypeScript strict mode** is enabled (`noImplicitAny: false` for flexibility)
+- **Zustand stores** hydrate from IndexedDB on app initialization via `AppInitializer`
+- **Tailwind v4** uses the `@theme inline` and `@custom-variant` directives in `globals.css` for design tokens and strict dark mode enforcement.
 
 ---
 
