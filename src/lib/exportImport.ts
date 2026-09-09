@@ -145,20 +145,28 @@ export const importCourseFromZip = async (file: File) => {
   };
 
   // Process IDs and restore files
-  const newCourse = { ...data.course, id: getNewId(data.course.id), createdAt: new Date(), updatedAt: new Date() };
+  const newCourse = { 
+    ...data.course, 
+    id: getNewId(data.course.id), 
+    name: data.course.name || data.course.title || "Untitled Course",
+    createdAt: new Date(), 
+    updatedAt: new Date() 
+  };
   
-  const newModules = data.modules.map((m: Module) => ({
+  const newModules = data.modules.map((m: Module & { title?: string }) => ({
     ...m,
     id: getNewId(m.id),
+    name: m.name || m.title || "Untitled Module",
     courseId: getNewId(m.courseId),
     createdAt: new Date(),
     updatedAt: new Date()
   }));
 
-  const newTopics = await Promise.all(data.topics.map(async (t: Topic) => {
+  const newTopics = await Promise.all(data.topics.map(async (t: Topic & { title?: string }) => {
     const newT = {
       ...t,
       id: getNewId(t.id),
+      name: t.name || t.title || "Untitled Topic",
       moduleId: getNewId(t.moduleId),
       courseId: getNewId(t.courseId),
       prerequisites: typeof t.prerequisites === 'string' ? [t.prerequisites] : t.prerequisites,
