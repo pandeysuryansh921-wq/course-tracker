@@ -23,7 +23,7 @@ A privacy-focused, local-first web application that helps self-learners structur
 - **Resource links** attached to each topic (videos, PDFs, articles, textbooks) with specific **Study Scopes** to prevent overwhelm.
 - **Per-topic notes** and structured **Study Plans** with inline editing.
 - **Practice Exercises & Capstone Projects**: Dedicated hierarchical support for low-stakes practice routines (at the topic level) and major capstone projects (at the module level) with nested milestones.
-- **Course Import/Export (V4 Schema)**: Backup entire courses (including structure, files, assignments, and deep metadata) to a `.zip` file, and share or import them seamlessly. The app natively supports complex 4.5-year university-style curricula via the V4 JSON spec.
+- **Course Import/Export (Advanced Schema)**: Backup entire courses (including structure, files, assignments, and deep metadata) to a `.zip` file, and share or import them seamlessly. The app natively supports complex 4.5-year university-style curricula via the advanced JSON spec.
 
 ### 🧠 Smart Flashcards (Spaced Repetition)
 - **SuperMemo-2 Algorithm**: Automatically schedules flashcard reviews based on your recall performance.
