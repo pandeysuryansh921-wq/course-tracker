@@ -27,7 +27,7 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
   const [isAddingResource, setIsAddingResource] = React.useState(false);
   const [resourceSource, setResourceSource] = React.useState<'link' | 'upload'>('link');
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
-  const [newResource, setNewResource] = React.useState({ title: '', url: '', type: 'other' });
+  const [newResource, setNewResource] = React.useState({ title: '', url: '', type: 'other', role: 'PRIMARY' });
   const [scoreInput, setScoreInput] = React.useState('');
   
   const [isFlashcardModalOpen, setIsFlashcardModalOpen] = React.useState(false);
@@ -91,16 +91,16 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
     
     if (resourceSource === 'link') {
       if (!newResource.url) return;
-      addResource(topic.id, newResource.title, newResource.url, newResource.type as Resource['type']);
-      setNewResource({ title: '', url: '', type: 'other' });
+      addResource(topic.id, newResource.title, newResource.url, newResource.type as Resource['type'], newResource.role);
+      setNewResource({ title: '', url: '', type: 'other', role: 'PRIMARY' });
       setIsAddingResource(false);
     } else {
       if (!selectedFile) return;
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64String = event.target?.result as string;
-        addResource(topic.id, newResource.title, base64String, newResource.type as Resource['type']);
-        setNewResource({ title: '', url: '', type: 'other' });
+        addResource(topic.id, newResource.title, base64String, newResource.type as Resource['type'], newResource.role);
+        setNewResource({ title: '', url: '', type: 'other', role: 'PRIMARY' });
         setSelectedFile(null);
         setIsAddingResource(false);
       };
@@ -838,6 +838,19 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                         <option value="textbook">Textbook</option>
                         <option value="article">Article</option>
                         <option value="other">Other</option>
+                      </select>
+                      <select 
+                        value={newResource.role}
+                        onChange={(e) => setNewResource({...newResource, role: e.target.value})}
+                        className="w-full sm:w-36 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
+                      >
+                        <option value="PRIMARY">PRIMARY</option>
+                        <option value="SECONDARY">SECONDARY</option>
+                        <option value="VISUAL">VISUAL</option>
+                        <option value="PRACTICE">PRACTICE</option>
+                        <option value="IMPLEMENTATION">IMPLEMENTATION</option>
+                        <option value="REFERENCE">REFERENCE</option>
+                        <option value="DEEP_DIVE">DEEP DIVE</option>
                       </select>
                       <Button type="submit" size="sm" disabled={resourceSource === 'upload' && !selectedFile}>
                         Save

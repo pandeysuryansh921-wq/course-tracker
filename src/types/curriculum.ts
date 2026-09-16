@@ -139,63 +139,124 @@ export interface Module {
   updatedAt: Date;
 }
 
-export interface Topic {
+export interface Concept {
   id: string;
-  uri?: string; // Phase 1
+  name: string;
+  description?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ResourceMapping {
+  id: string;
+  resourceId: string;
+  targetType: 'concept' | 'topic';
+  targetId: string;
+  role?: string;
+  coverage?: number;
+  confidenceScore?: number; // Harvested intelligence
+  successCount?: number;    // How many times this resource led to mastery
+  usageCount?: number;      // How many times this resource was used
+  createdAt: Date;
+}
+
+export interface ResourceTemplate {
+  id: string; // canonical stable id
+  canonicalUrl: string;
+  title: string;
+  provider?: string;
+  author?: string;
+  type: ResourceType | string;
+  formats?: string[];
+  language?: string;
+  level?: string;
+  estimatedHours?: number;
+  description?: string;
+  freeStatus?: string;
+  verificationStatus?: string; 
+  roles?: string[]; 
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserResourceSelection {
+  id: string;
+  resourceId: string;
+  courseId: string;
+  topicId?: string;
+  role?: string;
+  status?: 'planned' | 'in-progress' | 'completed';
+  favorite?: boolean;
+  personalNotes?: string;
+  order?: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TopicTemplate {
+  id: string;
+  uri?: string;
   moduleId: string;
   courseId: string;
   name: string;
   description?: string;
+  objectives?: string[]; 
+  conceptIds?: string[];
   studyPlan?: Record<string, string>;
-  scope?: {
-    core?: string[];
-    important?: string[];
-    optional?: string[];
-    skip?: string[];
-  };
+  scope?: any;
   learningOutcomes?: string[];
   difficulty?: string;
   learningLevel?: string;
   estimatedHours?: number;
   prerequisites?: string[];
   medicalApplications?: string[];
-  completionCriteria?: {
-    minimum?: string[];
-    mastery?: string[];
-  };
-  status: TopicStatus;
-  isCompleted: boolean;
-  isMastered?: boolean;
-  resources: Resource[];
+  completionCriteria?: any;
   order: number;
-  quizUrl?: string;
-  quizScore?: number;
-  quizMaxScore?: number;
-  assignments?: Assignment[];
-  nextReviewDate?: Date;
-  notes: string;
   skills?: string[];
-  assignment?: any;
-  quiz?: any;
-  externalLinks?: LinkedNode[]; // Phase 1
+  quizUrl?: string;
+  quizMaxScore?: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface Resource {
-  id: string;
+export interface TopicProgress {
+  id: string; // usually same as topicId for 1:1 user-to-topic relationship in local-first
   topicId: string;
-  title: string;
-  url: string;
-  type: ResourceType | string;
-  freeStatus?: string;
-  estimatedHours?: number;
-  description?: string;
-  scopeInstructions?: string;
-  required?: boolean;
-  order?: number;
+  status: TopicStatus;
+  isCompleted: boolean;
+  isMastered?: boolean;
+  masteryScore?: number;
+  nextReviewDate?: Date;
+  notes?: string;
+  quizScore?: number;
+  externalLinks?: LinkedNode[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface CourseEnrollment {
+  id: string;
+  courseId: string;
+  status: 'active' | 'completed' | 'paused';
+  startedAt: Date;
+  completedAt?: Date;
+}
+
+// ---------------------------------------------------------
+// UI LAYER TYPES (JOINED VIEWS FOR BACKWARD COMPATIBILITY)
+// ---------------------------------------------------------
+
+export interface Topic extends TopicTemplate, Omit<TopicProgress, 'id' | 'createdAt' | 'updatedAt'> {
+  resources: Resource[];
+  assignments?: Assignment[];
+  assignment?: any;
+  quiz?: any;
+}
+
+export interface Resource extends ResourceTemplate, Omit<UserResourceSelection, 'id' | 'createdAt' | 'updatedAt'> {
+  url: string; // mapped to canonicalUrl for backward compat
+  scopeInstructions?: string; // mapped to role/notes
+  required?: boolean;
 }
 
 export interface CurriculumStats {
@@ -208,14 +269,14 @@ export interface CurriculumStats {
 }
 
 export interface UserProfile {
-  id: string; // Typically just "me" since it's local
+  id: string; 
   name: string;
   xp: number;
   level: number;
-  badges: string[]; // IDs or names of unlocked badges
-  ecosystemMode?: boolean; // Controls whether to broadcast to local-first ecosystem
-  useExternalTimer?: boolean; // Phase 5
-  useExternalFlashcards?: boolean; // Phase 5
+  badges: string[]; 
+  ecosystemMode?: boolean; 
+  useExternalTimer?: boolean; 
+  useExternalFlashcards?: boolean; 
   createdAt: Date;
   updatedAt: Date;
 }

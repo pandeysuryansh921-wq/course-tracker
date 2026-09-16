@@ -11,8 +11,9 @@ import {
   Clock, 
   BarChart3, 
   Settings,
-  Menu,
-  X
+  X,
+  Library,
+  Target
 } from 'lucide-react';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { useSidebarStore } from '@/stores/useSidebarStore';
@@ -21,6 +22,7 @@ import { SettingsModal } from '@/components/layout/SettingsModal';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/curriculum', label: 'Curriculum', icon: BookOpen },
+  { href: '/library', label: 'Library', icon: Library }, { href: '/study', label: 'Study Engine', icon: Target },
   { href: '/journal', label: 'Journal', icon: Clock },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
 ];
@@ -118,3 +120,4 @@ export function Sidebar() {
     </>
   );
 }
+

@@ -14,9 +14,9 @@ export const exportCourseToZip = async (courseId: string) => {
 
   const modules = await db.modules.where('courseId').equals(courseId).toArray();
   const moduleIds = modules.map(m => m.id);
-  const topics = await db.topics.where('courseId').equals(courseId).toArray();
+  const topics = useCurriculumStore.getState().topics.filter(t => t.courseId === courseId);
   const topicIds = topics.map(t => t.id);
-  const resources = await db.resources.where('topicId').anyOf(topicIds).toArray();
+  const resources = useCurriculumStore.getState().resources.filter(r => topicIds.includes(r.topicId as string));
   const practices = await db.practices.where('courseId').equals(courseId).toArray();
   const projects = await db.projects.where('courseId').equals(courseId).toArray();
 
@@ -149,7 +149,7 @@ export const importCourseFromZip = async (file: File) => {
   const newCourse = { 
     ...data.course, 
     id: courseId, 
-    uri: generateUri('course', courseId),
+    uri: generateUri('course', courseId) || '',
     name: data.course.name || data.course.title || "Untitled Course",
     createdAt: new Date(), 
     updatedAt: new Date() 
@@ -160,7 +160,7 @@ export const importCourseFromZip = async (file: File) => {
     return {
       ...m,
       id: modId,
-      uri: generateUri('module', modId),
+      uri: generateUri('module', modId) || '',
       name: m.name || m.title || "Untitled Module",
       courseId: getNewId(m.courseId),
       createdAt: new Date(),
@@ -173,7 +173,7 @@ export const importCourseFromZip = async (file: File) => {
     const newT = {
       ...t,
       id: topicId,
-      uri: generateUri('topic', topicId),
+      uri: generateUri('topic', topicId) || '',
       name: t.name || t.title || "Untitled Topic",
       moduleId: getNewId(t.moduleId),
       courseId: getNewId(t.courseId),
@@ -202,7 +202,7 @@ export const importCourseFromZip = async (file: File) => {
     return {
       ...r,
       id: getNewId(r.id),
-      topicId: getNewId(r.topicId),
+      topicId: getNewId(r.topicId as string),
       url: await restoreBase64Url(r.url),
       createdAt: new Date(),
       updatedAt: new Date()
@@ -262,11 +262,26 @@ export const importCourseFromZip = async (file: File) => {
   }
 
   // Save to database
-  await db.transaction('rw', [db.courses, db.modules, db.topics, db.resources, db.practices, db.projects], async () => {
+  await db.transaction('rw', [db.courses, db.modules, db.topicTemplates, db.topicProgress, db.resourceTemplates, db.userResourceSelections, db.practices, db.projects], async () => {
     await db.courses.add(newCourse);
     await db.modules.bulkAdd(newModules);
-    await db.topics.bulkAdd(newTopics);
-    await db.resources.bulkAdd(newResources);
+    
+    const topicTemplates = newTopics.map(({ status, isCompleted, isMastered, masteryScore, nextReviewDate, notes, quizScore, externalLinks, ...t }) => t);
+    const topicProgress = newTopics.map(({ id, status, isCompleted, isMastered, masteryScore, nextReviewDate, notes, quizScore, externalLinks, createdAt, updatedAt }) => ({ id, topicId: id, status, isCompleted, isMastered, masteryScore, nextReviewDate, notes, quizScore, externalLinks, createdAt, updatedAt }));
+    await db.topicTemplates.bulkAdd(topicTemplates as any);
+    await db.topicProgress.bulkAdd(topicProgress as any);
+
+    const resourceTemplates: any[] = [];
+    const resourceSelections: any[] = [];
+    for (const r of newResources) {
+      const resId = 'res_' + btoa(r.url || 'unknown').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16);
+      if (!resourceTemplates.find(rt => rt.canonicalUrl === r.url)) {
+        resourceTemplates.push({ id: resId, canonicalUrl: r.url || '', title: r.title, type: r.type, freeStatus: r.freeStatus, estimatedHours: r.estimatedHours, description: r.description, createdAt: r.createdAt, updatedAt: r.updatedAt });
+      }
+      resourceSelections.push({ id: r.id, resourceId: resId, courseId: newCourse.id, topicId: r.topicId, status: 'planned', role: r.scopeInstructions, order: r.order, createdAt: r.createdAt, updatedAt: r.updatedAt });
+    }
+    await db.resourceTemplates.bulkAdd(resourceTemplates);
+    await db.userResourceSelections.bulkAdd(resourceSelections);
     if (newPractices.length) await db.practices.bulkAdd(newPractices);
     if (newProjects.length) await db.projects.bulkAdd(newProjects);
   });
@@ -274,3 +289,5 @@ export const importCourseFromZip = async (file: File) => {
   // Re-initialize store so UI updates
   await useCurriculumStore.getState().initialize();
 };
+
+

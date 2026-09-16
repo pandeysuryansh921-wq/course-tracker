@@ -6,7 +6,7 @@ import { StatsCard } from '@/components/dashboard/StatsCard'
 import { GamificationWidget } from '@/components/dashboard/GamificationWidget'
 import { useCurriculumStore } from '@/stores/useCurriculumStore'
 import { useTimerStore } from '@/stores/useTimerStore'
-import { BookOpen, CheckCircle, Flame, Calendar, Play, Plus, Clock } from 'lucide-react'
+import { BookOpen, Calendar, CheckCircle, Clock, Flame, Plus, Target } from 'lucide-react'
 import Link from 'next/link'
 
 export default function DashboardPage() {
@@ -27,7 +27,7 @@ export default function DashboardPage() {
   const courseTopics = topics ? topics.filter(t => t.courseId === selectedCourseId) : []
   const completedTopics = courseTopics.filter(t => t.isCompleted).length
   const overallProgress = courseTopics.length > 0 ? Math.round((completedTopics / courseTopics.length) * 100) : 0
-  const dueForReview = courseTopics.filter(t => t.status === 'needs-review').slice(0, 5)
+  const dueForReview = courseTopics.filter(t => t.status === 'needs-review' || (t.nextReviewDate && new Date(t.nextReviewDate) <= new Date())).slice(0, 5);
 
   // Calculate Streak
   let studyStreak = 0;
@@ -212,7 +212,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/curriculum" className="group flex items-center space-x-4 rounded-2xl border border-slate-200 bg-white p-6 transition-all hover:-translate-y-1 hover:border-violet-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-violet-700">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 group-hover:bg-violet-200 dark:bg-violet-500/20 dark:group-hover:bg-violet-500/30">
             <BookOpen className="h-6 w-6 text-violet-600 dark:text-violet-400" />
@@ -242,7 +242,17 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">Focus on a session</p>
           </div>
         </Link>
+        <Link href="/study" className="group flex items-center space-x-4 rounded-2xl border border-slate-200 bg-white p-6 transition-all hover:-translate-y-1 hover:border-pink-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-pink-700">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-pink-100 group-hover:bg-pink-200 dark:bg-pink-500/20 dark:group-hover:bg-pink-500/30">
+            <Target className="h-6 w-6 text-pink-600 dark:text-pink-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white">Study Engine</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Your optimal path</p>
+          </div>
+        </Link>
       </div>
     </div>
   )
 }
+

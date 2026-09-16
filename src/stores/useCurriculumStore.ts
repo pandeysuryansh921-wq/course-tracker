@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { db } from '@/lib/db';
+import { harvestResourceEffectiveness } from '@/lib/harvester';
 import type { 
   Course, 
   Module, 
@@ -64,7 +65,7 @@ interface CurriculumActions {
   deleteAssignment: (topicId: string, assignmentId: string) => Promise<void>;
 
   // Resource actions
-  addResource: (topicId: string, title: string, url: string, type: ResourceType | string) => Promise<Resource>;
+  addResource: (topicId: string, title: string, url: string, type: ResourceType | string, role?: string) => Promise<Resource>;
   deleteResource: (id: string) => Promise<void>;
 
   // Flashcard actions
@@ -99,8 +100,28 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     try {
       const courses = await db.courses.toArray();
       const modules = await db.modules.toArray();
-      const topics = await db.topics.toArray();
-      const resources = await db.resources.toArray();
+      
+      const topicTemplates = await db.topicTemplates.toArray();
+      const topicProgress = await db.topicProgress.toArray();
+      const topics: Topic[] = topicTemplates.map(template => {
+        const progress = topicProgress.find(p => p.topicId === template.id) || {
+          id: template.id, topicId: template.id, status: 'not-started', isCompleted: false, createdAt: new Date(), updatedAt: new Date()
+        };
+        return { ...template, ...progress, resources: [] } as Topic;
+      });
+
+      const resourceTemplates = await db.resourceTemplates.toArray();
+      const userResourceSelections = await db.userResourceSelections.toArray();
+      const resources: Resource[] = userResourceSelections.map(selection => {
+        const template = resourceTemplates.find(t => t.id === selection.resourceId) || {} as any;
+        return {
+          ...template,
+          ...selection,
+          url: template.canonicalUrl,
+          scopeInstructions: selection.role,
+        } as Resource;
+      });
+
       const flashcards = await db.flashcards.toArray();
       const practices = await db.practices.toArray();
       const projects = await db.projects.toArray();
@@ -118,7 +139,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     const id = generateId();
     const newCourse: Course = {
       id,
-      uri: generateUri('course', id),
+      uri: generateUri('course', id) || '',
       name,
       description,
       color,
@@ -143,22 +164,21 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
   deleteCourse: async (id) => {
     const modules = get().modules.filter(m => m.courseId === id);
     const moduleIds = modules.map(m => m.id);
-    const topics = get().topics.filter(t => moduleIds.includes(t.moduleId));
+    const topics = get().topics.filter(t => moduleIds.includes(t.moduleId as string));
     const topicIds = topics.map(t => t.id);
-    const resources = get().resources.filter(r => topicIds.includes(r.topicId));
+    const resources = get().resources.filter(r => topicIds.includes(r.topicId as string));
     
     await Promise.all([
       db.courses.delete(id),
       ...moduleIds.map(mid => db.modules.delete(mid)),
-      ...topicIds.map(tid => db.topics.delete(tid)),
-      ...resources.map(r => db.resources.delete(r.id))
+      ...topicIds.map(tid => db.topicTemplates.delete(tid)), ...topicIds.map(tid => db.topicProgress.delete(tid)), ...resources.map(r => db.userResourceSelections.delete(r.id))
     ]);
 
     set((state) => ({
       courses: state.courses.filter(c => c.id !== id),
       modules: state.modules.filter(m => m.courseId !== id),
       topics: state.topics.filter(t => t.courseId !== id),
-      resources: state.resources.filter(r => !topicIds.includes(r.topicId))
+      resources: state.resources.filter(r => !topicIds.includes(r.topicId as string))
     }));
   },
 
@@ -167,7 +187,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     const id = generateId();
     const newModule: Module = {
       id,
-      uri: generateUri('module', id),
+      uri: generateUri('module', id) || '',
       courseId,
       name,
       description,
@@ -192,18 +212,17 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
   deleteModule: async (id) => {
     const topics = get().topics.filter(t => t.moduleId === id);
     const topicIds = topics.map(t => t.id);
-    const resources = get().resources.filter(r => topicIds.includes(r.topicId));
+    const resources = get().resources.filter(r => topicIds.includes(r.topicId as string));
 
     await Promise.all([
       db.modules.delete(id),
-      ...topicIds.map(tid => db.topics.delete(tid)),
-      ...resources.map(r => db.resources.delete(r.id))
+      ...topicIds.map(tid => db.topicTemplates.delete(tid)), ...topicIds.map(tid => db.topicProgress.delete(tid)), ...resources.map(r => db.userResourceSelections.delete(r.id))
     ]);
 
     set((state) => ({
       modules: state.modules.filter(m => m.id !== id),
       topics: state.topics.filter(t => t.moduleId !== id),
-      resources: state.resources.filter(r => !topicIds.includes(r.topicId))
+      resources: state.resources.filter(r => !topicIds.includes(r.topicId as string))
     }));
   },
 
@@ -212,7 +231,8 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     const id = generateId();
     const newTopic: Topic = {
       id,
-      uri: generateUri('topic', id),
+      topicId: id,
+      uri: generateUri('topic', id) || '',
       moduleId,
       courseId,
       name,
@@ -228,16 +248,15 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    await db.topics.put(newTopic);
+    const { status, isCompleted, isMastered, masteryScore, nextReviewDate, notes, quizScore, externalLinks, ...template } = newTopic; const progress = { id: newTopic.id, topicId: newTopic.id, status, isCompleted, isMastered, masteryScore, nextReviewDate, notes, quizScore, externalLinks, createdAt: new Date(), updatedAt: new Date() }; await Promise.all([db.topicTemplates.put(template), db.topicProgress.put(progress)]);
     set((state) => ({ topics: [...state.topics, newTopic] }));
     return newTopic;
   },
 
   updateTopic: async (id, updates) => {
-    const updated = { ...updates, updatedAt: new Date() };
-    await db.topics.update(id, updated);
+    const templateKeys = ['name', 'description', 'studyPlan', 'scope', 'learningOutcomes', 'difficulty', 'learningLevel', 'estimatedHours', 'prerequisites', 'medicalApplications', 'completionCriteria', 'order', 'skills', 'quizUrl', 'quizMaxScore', 'assignments']; const progressKeys = ['status', 'isCompleted', 'isMastered', 'masteryScore', 'nextReviewDate', 'notes', 'quizScore', 'externalLinks']; const templateUpdates: any = {}; const progressUpdates: any = {}; for (const key of Object.keys(updates)) { if (templateKeys.includes(key)) templateUpdates[key] = (updates as any)[key]; if (progressKeys.includes(key)) progressUpdates[key] = (updates as any)[key]; } if (Object.keys(templateUpdates).length > 0) { templateUpdates.updatedAt = new Date(); await db.topicTemplates.update(id, templateUpdates); } if (Object.keys(progressUpdates).length > 0) { progressUpdates.updatedAt = new Date(); await db.topicProgress.update(id, progressUpdates); }
     set((state) => ({
-      topics: state.topics.map(t => t.id === id ? { ...t, ...updated } : t)
+      topics: state.topics.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date() } : t)
     }));
   },
 
@@ -245,8 +264,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     const resources = get().resources.filter(r => r.topicId === id);
     
     await Promise.all([
-      db.topics.delete(id),
-      ...resources.map(r => db.resources.delete(r.id))
+      db.topicTemplates.delete(id), db.topicProgress.delete(id), ...resources.map(r => db.userResourceSelections.delete(r.id))
     ]);
 
     set((state) => ({
@@ -284,21 +302,32 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     let isCompleted = false;
     let status: TopicStatus = 'needs-review';
 
+    let nextReviewDate = new Date();
     if (percentage >= 85) {
       isMastered = true;
       isCompleted = true;
       status = 'completed';
+      nextReviewDate.setDate(nextReviewDate.getDate() + 7); // Review in 7 days
     } else if (percentage >= 70) {
       isMastered = false;
       isCompleted = true;
       status = 'completed';
+      nextReviewDate.setDate(nextReviewDate.getDate() + 3); // Review in 3 days
     } else {
       isMastered = false;
       isCompleted = false;
       status = 'needs-review';
+      nextReviewDate.setDate(nextReviewDate.getDate() + 1); // Review tomorrow
     }
 
-    await get().updateTopic(id, { quizScore: score, isMastered, isCompleted, status });
+    harvestResourceEffectiveness(id, percentage, isMastered);
+    await get().updateTopic(id, { quizScore: score, 
+      isMastered, 
+      isCompleted, 
+      status,
+      masteryScore: percentage,
+      nextReviewDate 
+    });
 
     if (isCompleted && topic.status !== 'completed') {
       import('@/stores/useUserStore').then(({ useUserStore }) => {
@@ -351,23 +380,26 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     await get().updateTopic(topicId, { assignments });
   },
 
-  addResource: async (topicId, title, url, type) => {
+  addResource: async (topicId, title, url, type, role) => {
     const newResource: Resource = {
       id: generateId(),
+      resourceId: '', // will be set
+      courseId: '', // will be set
       topicId,
+      canonicalUrl: url,
       title,
       url,
       type,
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    await db.resources.put(newResource);
+    const resId = 'res_' + btoa(url).replace(/[^a-zA-Z0-9]/g, "").substring(0, 16); const template = { id: resId, canonicalUrl: url, title, type, createdAt: new Date(), updatedAt: new Date() }; const selection = { id: newResource.id, resourceId: resId, courseId: "", topicId, status: 'planned' as const, role, createdAt: new Date(), updatedAt: new Date() }; await db.resourceTemplates.put(template); await db.userResourceSelections.put(selection);
     set((state) => ({ resources: [...state.resources, newResource] }));
     return newResource;
   },
 
   deleteResource: async (id) => {
-    await db.resources.delete(id);
+    await db.userResourceSelections.delete(id);
     set((state) => ({ resources: state.resources.filter(r => r.id !== id) }));
   },
 
@@ -431,12 +463,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     const nextReview = new Date();
     nextReview.setDate(nextReview.getDate() + interval);
 
-    await get().updateFlashcard(id, {
-      repetitions,
-      interval,
-      easeFactor,
-      nextReview
-    });
+    await get().updateFlashcard(id, { repetitions, interval, easeFactor, nextReview }); if (quality < 3) { await get().updateTopic(flashcard.topicId, { status: 'needs-review', isMastered: false, nextReviewDate: nextReview }); }
   },
 
   getCourseModules: (courseId) => {
@@ -475,3 +502,8 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     };
   }
 }));
+
+
+
+
+

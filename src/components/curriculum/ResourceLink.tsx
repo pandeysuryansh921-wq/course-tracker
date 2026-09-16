@@ -62,9 +62,22 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
       </div>
       
       {resource.scopeInstructions && (
-        <div className="ml-7 mr-2 p-2 bg-blue-50 dark:bg-blue-900/10 border-l-2 border-blue-400 dark:border-blue-700 rounded-r-md">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 block mb-1">Study Scope</span>
-          <p className="text-xs text-blue-900 dark:text-blue-200">{resource.scopeInstructions}</p>
+        <div className="ml-7 mb-1 flex items-center">
+          {['PRIMARY', 'SECONDARY', 'VISUAL', 'PRACTICE', 'IMPLEMENTATION', 'REFERENCE', 'DEEP_DIVE', 'RESEARCH', 'REVISION'].includes(resource.scopeInstructions.toUpperCase()) ? (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+              resource.scopeInstructions.toUpperCase() === 'PRIMARY' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' :
+              resource.scopeInstructions.toUpperCase() === 'SECONDARY' ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' :
+              resource.scopeInstructions.toUpperCase() === 'PRACTICE' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
+              'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+            }`}>
+              {resource.scopeInstructions}
+            </span>
+          ) : (
+            <div className="p-2 w-full bg-blue-50 dark:bg-blue-900/10 border-l-2 border-blue-400 dark:border-blue-700 rounded-r-md">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 block mb-1">Study Scope</span>
+              <p className="text-xs text-blue-900 dark:text-blue-200">{resource.scopeInstructions}</p>
+            </div>
+          )}
         </div>
       )}
 
