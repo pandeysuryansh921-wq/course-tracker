@@ -10,6 +10,7 @@ interface UserState {
   addXP: (amount: number) => Promise<void>;
   unlockBadge: (badgeId: string) => Promise<void>;
   setEcosystemMode: (enabled: boolean) => Promise<void>;
+  updateProfileSettings: (settings: Partial<UserProfile>) => Promise<void>;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -82,6 +83,21 @@ export const useUserStore = create<UserState>((set, get) => ({
     const updated = {
       ...profile,
       ecosystemMode: enabled,
+      updatedAt: new Date()
+    };
+    
+    
+    await db.userProfile.put(updated);
+    set({ profile: updated });
+  },
+
+  updateProfileSettings: async (settings: Partial<UserProfile>) => {
+    const { profile } = get();
+    if (!profile) return;
+    
+    const updated = {
+      ...profile,
+      ...settings,
       updatedAt: new Date()
     };
     

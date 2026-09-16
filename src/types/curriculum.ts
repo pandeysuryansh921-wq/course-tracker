@@ -214,6 +214,8 @@ export interface UserProfile {
   level: number;
   badges: string[]; // IDs or names of unlocked badges
   ecosystemMode?: boolean; // Controls whether to broadcast to local-first ecosystem
+  useExternalTimer?: boolean; // Phase 5
+  useExternalFlashcards?: boolean; // Phase 5
   createdAt: Date;
   updatedAt: Date;
 }

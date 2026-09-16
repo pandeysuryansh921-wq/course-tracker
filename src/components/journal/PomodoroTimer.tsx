@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, Timer as TimerIcon, Clock, Coffee, BookOpen, Settings, Volume2, ShieldAlert } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Timer as TimerIcon, Clock, Coffee, BookOpen, Settings, Volume2, ShieldAlert, Network } from 'lucide-react';
 import { useTimerStore } from '@/stores/useTimerStore';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
+import { useUserStore } from '@/stores/useUserStore';
 import { formatTimer } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
@@ -91,6 +92,7 @@ const TimerDisplay = () => {
 };
 
 export default function PomodoroTimer() {
+  const profile = useUserStore(state => state.profile);
   const {
     mode, state,
     selectedTopicId, selectedCourseId, config,
@@ -199,6 +201,29 @@ export default function PomodoroTimer() {
 
   const availableModules = localCourseId ? getCourseModules(localCourseId) : [];
   const availableTopics = availableModules.flatMap(m => getModuleTopics(m.id));
+
+  if (profile?.ecosystemMode && profile?.useExternalTimer) {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center w-full max-w-md mx-auto relative z-0 min-h-[400px]">
+        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-6">
+          <Network className="w-8 h-8" />
+        </div>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Timer Delegated</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-8">
+          You have chosen to use an external ecosystem app for study sessions.
+        </p>
+        <button
+          onClick={() => {
+            alert("Opening external ecosystem app for productivity: ecosystem://productivity...");
+          }}
+          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow font-semibold transition-transform active:scale-95"
+        >
+          <Network className="w-5 h-5" />
+          Launch Productivity App
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border border-slate-200 dark:border-slate-800 flex flex-col items-center w-full max-w-md mx-auto relative z-0 min-h-[550px]">

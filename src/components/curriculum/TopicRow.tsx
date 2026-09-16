@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Topic, Resource, FileAttachmentType, AssignmentFile } from '@/types/curriculum';
 import { ChevronDown, ChevronRight, Trash2, Plus, Lock, ExternalLink, FileText, CheckCircle, Clock, BrainCircuit } from 'lucide-react';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
+import { useUserStore } from '@/stores/useUserStore';
 import { getStatusBg, getStatusLabel } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import ResourceLink from '@/components/curriculum/ResourceLink';
@@ -21,6 +22,7 @@ interface TopicRowProps {
 }
 
 export default function TopicRow({ topic, isLocked = false, isEditMode = false }: TopicRowProps) {
+  const profile = useUserStore(state => state.profile);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isAddingResource, setIsAddingResource] = React.useState(false);
   const [resourceSource, setResourceSource] = React.useState<'link' | 'upload'>('link');
@@ -760,10 +762,17 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                     <Plus className="w-4 h-4 mr-1" /> Add Resource
                   </Button>
                 )}
-                <Button variant="secondary" size="sm" onClick={() => setIsFlashcardModalOpen(true)} className="w-full sm:w-auto border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800/50 dark:text-violet-400 dark:hover:bg-violet-900/30">
-                  <BrainCircuit className="w-4 h-4 mr-1" /> 
-                  Flashcards {flashcards.length > 0 && `(${flashcards.length})`}
-                </Button>
+                  <Button variant="secondary" size="sm" onClick={() => {
+                    if (profile?.ecosystemMode && profile?.useExternalFlashcards) {
+                      alert("Opening external ecosystem app for flashcards: ecosystem://flashcards...");
+                      // We would use launchIntent('ecosystem://flashcards') here
+                    } else {
+                      setIsFlashcardModalOpen(true);
+                    }
+                  }} className="w-full sm:w-auto border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800/50 dark:text-violet-400 dark:hover:bg-violet-900/30">
+                    <BrainCircuit className="w-4 h-4 mr-1" /> 
+                    {profile?.ecosystemMode && profile?.useExternalFlashcards ? 'Launch SRS App' : `Flashcards ${flashcards.length > 0 ? `(${flashcards.length})` : ''}`}
+                  </Button>
               </div>
               
               {isAddingResource && (

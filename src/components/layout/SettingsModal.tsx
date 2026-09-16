@@ -18,7 +18,7 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const courses = useCurriculumStore((state) => state.courses);
   const { theme, toggleTheme } = useThemeStore();
-  const { profile, setEcosystemMode } = useUserStore();
+  const { profile, setEcosystemMode, updateProfileSettings } = useUserStore();
   
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
@@ -277,6 +277,40 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${profile?.ecosystemMode ? 'left-5' : 'left-1'}`} />
             </div>
           </button>
+
+          {profile?.ecosystemMode && (
+            <div className="flex flex-col gap-2 pl-4 ml-2 border-l-2 border-slate-200 dark:border-slate-700 mt-2">
+              <button
+                onClick={() => {
+                  if (profile) updateProfileSettings({ useExternalTimer: !profile.useExternalTimer });
+                }}
+                className="flex items-center justify-between w-full px-3 py-2 bg-transparent rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Delegate Study Sessions</span>
+                  <span className="text-xs text-slate-500">Use external productivity app for sessions</span>
+                </div>
+                <div className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${profile.useExternalTimer ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-300 ${profile.useExternalTimer ? 'left-3.5' : 'left-0.5'}`} />
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (profile) updateProfileSettings({ useExternalFlashcards: !profile.useExternalFlashcards });
+                }}
+                className="flex items-center justify-between w-full px-3 py-2 bg-transparent rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Delegate Flashcards</span>
+                  <span className="text-xs text-slate-500">Use external SRS app for spaced repetition</span>
+                </div>
+                <div className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${profile.useExternalFlashcards ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-300 ${profile.useExternalFlashcards ? 'left-3.5' : 'left-0.5'}`} />
+                </div>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Theme Toggle */}
