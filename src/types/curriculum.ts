@@ -100,8 +100,15 @@ export interface Project {
   medicalDomain?: string;
 }
 
+export interface LinkedNode {
+  nodeUri: string;
+  nodeType: string;
+  label: string;
+}
+
 export interface Course {
   id: string;
+  uri?: string; // Phase 1: Stable ecosystem URIs
   name: string;
   description: string;
   color: string;
@@ -122,6 +129,7 @@ export interface Course {
 
 export interface Module {
   id: string;
+  uri?: string; // Phase 1
   courseId: string;
   name: string;
   description: string;
@@ -133,6 +141,7 @@ export interface Module {
 
 export interface Topic {
   id: string;
+  uri?: string; // Phase 1
   moduleId: string;
   courseId: string;
   name: string;
@@ -168,6 +177,7 @@ export interface Topic {
   skills?: string[];
   assignment?: any;
   quiz?: any;
+  externalLinks?: LinkedNode[]; // Phase 1
   createdAt: Date;
   updatedAt: Date;
 }

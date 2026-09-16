@@ -8,6 +8,10 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
+export function generateUri(type: 'course' | 'module' | 'topic' | 'assignment', id: string): string {
+  return `ecosystem:learn:${type}:${id}`;
+}
+
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',

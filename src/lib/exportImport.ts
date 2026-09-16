@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { db } from '@/lib/db';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
-import { generateId } from '@/lib/utils';
+import { generateId, generateUri } from '@/lib/utils';
 import { Course, Module, Topic, Resource, Assignment } from '@/types/curriculum';
 
 export const exportCourseToZip = async (courseId: string) => {
@@ -145,27 +145,35 @@ export const importCourseFromZip = async (file: File) => {
   };
 
   // Process IDs and restore files
+  const courseId = getNewId(data.course.id);
   const newCourse = { 
     ...data.course, 
-    id: getNewId(data.course.id), 
+    id: courseId, 
+    uri: generateUri('course', courseId),
     name: data.course.name || data.course.title || "Untitled Course",
     createdAt: new Date(), 
     updatedAt: new Date() 
   };
   
-  const newModules = data.modules.map((m: Module & { title?: string }) => ({
-    ...m,
-    id: getNewId(m.id),
-    name: m.name || m.title || "Untitled Module",
-    courseId: getNewId(m.courseId),
-    createdAt: new Date(),
-    updatedAt: new Date()
-  }));
+  const newModules = data.modules.map((m: Module & { title?: string }) => {
+    const modId = getNewId(m.id);
+    return {
+      ...m,
+      id: modId,
+      uri: generateUri('module', modId),
+      name: m.name || m.title || "Untitled Module",
+      courseId: getNewId(m.courseId),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  });
 
   const newTopics = await Promise.all(data.topics.map(async (t: Topic & { title?: string }) => {
+    const topicId = getNewId(t.id);
     const newT = {
       ...t,
-      id: getNewId(t.id),
+      id: topicId,
+      uri: generateUri('topic', topicId),
       name: t.name || t.title || "Untitled Topic",
       moduleId: getNewId(t.moduleId),
       courseId: getNewId(t.courseId),
@@ -173,6 +181,7 @@ export const importCourseFromZip = async (file: File) => {
       medicalApplications: typeof t.medicalApplications === 'string' ? [t.medicalApplications] : t.medicalApplications,
       learningOutcomes: typeof t.learningOutcomes === 'string' ? [t.learningOutcomes] : t.learningOutcomes,
       skills: typeof t.skills === 'string' ? [t.skills] : t.skills,
+      externalLinks: t.externalLinks || [],
       createdAt: new Date(),
       updatedAt: new Date()
     };

@@ -13,7 +13,7 @@ import type {
   Practice,
   Project
 } from '@/types/curriculum';
-import { generateId } from '@/lib/utils';
+import { generateId, generateUri } from '@/lib/utils';
 
 interface CurriculumState {
   courses: Course[];
@@ -115,8 +115,10 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
   },
 
   addCourse: async (name, description, color = 'blue', icon = 'Book', gemLinks) => {
+    const id = generateId();
     const newCourse: Course = {
-      id: generateId(),
+      id,
+      uri: generateUri('course', id),
       name,
       description,
       color,
@@ -162,8 +164,10 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
 
   addModule: async (courseId, name, description, notebookUrl) => {
     const modules = get().modules.filter(m => m.courseId === courseId);
+    const id = generateId();
     const newModule: Module = {
-      id: generateId(),
+      id,
+      uri: generateUri('module', id),
       courseId,
       name,
       description,
@@ -204,8 +208,11 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
   },
 
   addTopic: async (moduleId, courseId, name, quizUrl, quizMaxScore = 100) => {
+    const topics = get().topics.filter(t => t.moduleId === moduleId);
+    const id = generateId();
     const newTopic: Topic = {
-      id: generateId(),
+      id,
+      uri: generateUri('topic', id),
       moduleId,
       courseId,
       name,
@@ -216,7 +223,8 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
       quizUrl,
       quizMaxScore,
       assignments: [],
-      order: get().topics.filter(t => t.moduleId === moduleId).length,
+      externalLinks: [],
+      order: topics.length,
       createdAt: new Date(),
       updatedAt: new Date()
     };

@@ -55,4 +55,24 @@ db.version(3).stores({
   projects: 'id, moduleId, courseId',
 });
 
+// Upgrade to version 4 (Ecosystem URIs)
+db.version(4).stores({
+  courses: 'id, uri, name, createdAt',
+  modules: 'id, uri, courseId, order, createdAt',
+  topics: 'id, uri, moduleId, courseId, status, order, nextReviewDate, createdAt',
+}).upgrade(tx => {
+  return Promise.all([
+    tx.table('courses').toCollection().modify(course => {
+      if (!course.uri) course.uri = `ecosystem:learn:course:${course.id}`;
+    }),
+    tx.table('modules').toCollection().modify(module => {
+      if (!module.uri) module.uri = `ecosystem:learn:module:${module.id}`;
+    }),
+    tx.table('topics').toCollection().modify(topic => {
+      if (!topic.uri) topic.uri = `ecosystem:learn:topic:${topic.id}`;
+      if (!topic.externalLinks) topic.externalLinks = [];
+    })
+  ]);
+});
+
 export { db };
