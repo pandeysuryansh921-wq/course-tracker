@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { StudySession, TimerMode, TimerState, TimerConfig } from '@/types/journal';
 import { generateId, generateUri } from '@/lib/utils';
 import { broadcastStudySessionStarted } from '@/lib/ecosystem';
+import { useUserStore } from './useUserStore';
 
 interface TimerStateStore {
   mode: TimerMode;
@@ -54,7 +55,10 @@ export const useTimerStore = create<TimerStateStore>((set, get) => ({
       set({ state: 'running' });
     }
 
-    if (selectedTopicId && selectedCourseId) {
+    const userProfile = useUserStore.getState().profile;
+    const isEcosystemEnabled = userProfile?.ecosystemMode === true;
+
+    if (selectedTopicId && selectedCourseId && isEcosystemEnabled) {
       // Broadcast to ecosystem
       broadcastStudySessionStarted({
         courseUri: generateUri('course', selectedCourseId),

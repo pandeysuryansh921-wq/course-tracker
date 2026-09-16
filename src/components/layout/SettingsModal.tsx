@@ -4,9 +4,10 @@ import React, { useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useThemeStore } from '@/stores/useThemeStore';
+import { useUserStore } from '@/stores/useUserStore';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
 import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
-import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut } from 'lucide-react';
+import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network } from 'lucide-react';
 import { CommunityLibraryModal } from './CommunityLibraryModal';
 
 interface SettingsModalProps {
@@ -17,6 +18,7 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const courses = useCurriculumStore((state) => state.courses);
   const { theme, toggleTheme } = useThemeStore();
+  const { profile, setEcosystemMode } = useUserStore();
   
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
@@ -251,6 +253,30 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <Cloud size={18} /> Connect Google Drive
             </button>
           )}
+        </div>
+
+        {/* Ecosystem Toggle */}
+        <div className="flex flex-col gap-3 pb-6 border-b border-border">
+          <h3 className="font-medium text-[var(--text-main)]">Integration</h3>
+          <button
+            onClick={() => {
+              if (profile) {
+                setEcosystemMode(!profile.ecosystemMode);
+              }
+            }}
+            className="flex items-center justify-between w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <Network size={20} />
+              <div className="flex flex-col">
+                <span className="font-medium text-slate-900 dark:text-slate-100">Local Ecosystem Mode</span>
+                <span className="text-xs text-slate-500">Broadcast study sessions to other apps</span>
+              </div>
+            </div>
+            <div className={`w-10 h-6 rounded-full relative transition-colors shrink-0 ${profile?.ecosystemMode ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${profile?.ecosystemMode ? 'left-5' : 'left-1'}`} />
+            </div>
+          </button>
         </div>
 
         {/* Theme Toggle */}

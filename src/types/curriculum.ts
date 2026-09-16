@@ -213,6 +213,7 @@ export interface UserProfile {
   xp: number;
   level: number;
   badges: string[]; // IDs or names of unlocked badges
+  ecosystemMode?: boolean; // Controls whether to broadcast to local-first ecosystem
   createdAt: Date;
   updatedAt: Date;
 }
