@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { db } from '@/lib/db';
 import { StudySession, TimerMode, TimerState, TimerConfig } from '@/types/journal';
-import { generateId } from '@/lib/utils';
+import { generateId, generateUri } from '@/lib/utils';
+import { broadcastStudySessionStarted } from '@/lib/ecosystem';
 
 interface TimerStateStore {
   mode: TimerMode;
@@ -46,11 +47,22 @@ export const useTimerStore = create<TimerStateStore>((set, get) => ({
   sessions: [],
 
   startTimer: () => {
-    const { mode } = get();
+    const { mode, selectedTopicId, selectedTopicName, selectedCourseId } = get();
     if (mode === 'stopwatch') {
       set({ state: 'running', timeElapsed: 0 });
     } else {
       set({ state: 'running' });
+    }
+
+    if (selectedTopicId && selectedCourseId) {
+      // Broadcast to ecosystem
+      broadcastStudySessionStarted({
+        courseUri: generateUri('course', selectedCourseId),
+        moduleUri: '', // To keep it simple we omit module URI since we don't store selectedModuleId directly here yet
+        topicUri: generateUri('topic', selectedTopicId),
+        topicTitle: selectedTopicName || 'Unknown Topic',
+        sessionId: generateId(),
+      });
     }
   },
 
