@@ -8,6 +8,7 @@ import { getStatusBg, getStatusLabel } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import ResourceLink from '@/components/curriculum/ResourceLink';
 import { FlashcardModal } from '@/components/curriculum/FlashcardModal';
+import { EcosystemLinks } from '@/components/curriculum/EcosystemLinks';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { TextArea } from '@/components/ui/TextArea';
@@ -847,6 +848,8 @@ export default function TopicRow({ topic, isLocked = false, isEditMode = false }
                 )}
               </div>
             </div>
+            
+            <EcosystemLinks links={topic.externalLinks || []} />
           </div>
         </div>
       )}
