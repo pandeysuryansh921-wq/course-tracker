@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { App, URLOpenListenerEvent } from '@capacitor/app';
 
+import { useCurriculumStore } from '@/stores/useCurriculumStore';
+
 export default function DeepLinkListener() {
   const router = useRouter();
 
@@ -27,15 +29,24 @@ export default function DeepLinkListener() {
               case 'course':
                 router.push(`/curriculum/course?id=${id}`);
                 break;
-              // For topic/module we can pass them in query params so the page auto-expands
-              case 'module':
-              case 'topic':
-                // We'd ideally need to look up the courseId for a given topic/module
-                // For a robust implementation we will redirect to a generic resolver 
-                // or assume we have an endpoint that looks it up.
-                // For now, redirecting to curriculum.
-                router.push(`/curriculum`);
+              case 'module': {
+                const mod = useCurriculumStore.getState().modules.find(m => m.id === id);
+                if (mod) {
+                  router.push(`/curriculum/course?id=${mod.courseId}`);
+                } else {
+                  router.push(`/curriculum`);
+                }
                 break;
+              }
+              case 'topic': {
+                const topic = useCurriculumStore.getState().topics.find(t => t.id === id);
+                if (topic) {
+                  router.push(`/curriculum/course?id=${topic.courseId}`);
+                } else {
+                  router.push(`/curriculum`);
+                }
+                break;
+              }
               default:
                 router.push('/');
             }
