@@ -273,17 +273,42 @@ export const importCourseFromZip = async (file: File) => {
 
     const resourceTemplates: any[] = [];
     const resourceSelections: any[] = [];
+    const urlToResId = new Map<string, string>();
+
     for (const r of newResources) {
-      const resId = 'res_' + btoa(r.url || 'unknown').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16);
-      if (!resourceTemplates.find(rt => rt.canonicalUrl === r.url)) {
-        resourceTemplates.push({ id: resId, canonicalUrl: r.url || '', title: r.title, type: r.type, freeStatus: r.freeStatus, estimatedHours: r.estimatedHours, description: r.description, createdAt: r.createdAt, updatedAt: r.updatedAt });
+      const canonicalUrl = r.url || '';
+      let resId = urlToResId.get(canonicalUrl);
+      if (!resId) {
+        resId = `res_${generateId()}`;
+        urlToResId.set(canonicalUrl, resId);
+        resourceTemplates.push({
+          id: resId,
+          canonicalUrl,
+          title: r.title || 'Untitled Resource',
+          type: r.type || 'DOCUMENTATION',
+          freeStatus: r.freeStatus,
+          estimatedHours: r.estimatedHours,
+          description: r.description,
+          createdAt: r.createdAt || new Date(),
+          updatedAt: r.updatedAt || new Date()
+        });
       }
-      resourceSelections.push({ id: r.id, resourceId: resId, courseId: newCourse.id, topicId: r.topicId, status: 'planned', role: r.scopeInstructions, order: r.order, createdAt: r.createdAt, updatedAt: r.updatedAt });
+      resourceSelections.push({
+        id: r.id,
+        resourceId: resId,
+        courseId: newCourse.id,
+        topicId: r.topicId,
+        status: 'planned',
+        role: r.scopeInstructions,
+        order: r.order,
+        createdAt: r.createdAt || new Date(),
+        updatedAt: r.updatedAt || new Date()
+      });
     }
-    await db.resourceTemplates.bulkAdd(resourceTemplates);
-    await db.userResourceSelections.bulkAdd(resourceSelections);
-    if (newPractices.length) await db.practices.bulkAdd(newPractices);
-    if (newProjects.length) await db.projects.bulkAdd(newProjects);
+    await db.resourceTemplates.bulkPut(resourceTemplates);
+    await db.userResourceSelections.bulkPut(resourceSelections);
+    if (newPractices.length) await db.practices.bulkPut(newPractices);
+    if (newProjects.length) await db.projects.bulkPut(newProjects);
   });
 
   // Re-initialize store so UI updates

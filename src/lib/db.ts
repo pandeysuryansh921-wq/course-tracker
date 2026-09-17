@@ -88,6 +88,8 @@ db.version(4).stores({
   ]);
 });
 
+import { generateId } from '@/lib/utils';
+
 // Upgrade to version 5 (Phase 1 Decoupling)
 db.version(5).stores({
   topicTemplates: 'id, moduleId, courseId, uri',
@@ -147,30 +149,32 @@ db.version(5).stores({
     });
   }
 
-  if (templates.length > 0) await tx.table('topicTemplates').bulkAdd(templates);
-  if (progress.length > 0) await tx.table('topicProgress').bulkAdd(progress);
+  if (templates.length > 0) await tx.table('topicTemplates').bulkPut(templates);
+  if (progress.length > 0) await tx.table('topicProgress').bulkPut(progress);
 
   // 2. Migrate Resources -> ResourceTemplate + UserResourceSelection
   const resources = await tx.table('resources').toArray();
   const resTemplates: any[] = [];
   const selections: any[] = [];
+  const urlToTemplateId = new Map<string, string>();
 
   for (const r of resources) {
-    // Basic deterministic ID for template based on URL (to avoid dupes in this run)
-    const templateId = `res_${btoa(r.url).replace(/[^a-zA-Z0-9]/g, '').substring(0, 16)}`;
-    
-    // Check if we already added it in this loop (to deduplicate same URL)
-    if (!resTemplates.find(rt => rt.canonicalUrl === r.url)) {
+    const canonicalUrl = r.url || '';
+    let templateId = urlToTemplateId.get(canonicalUrl);
+
+    if (!templateId) {
+      templateId = `res_${generateId()}`;
+      urlToTemplateId.set(canonicalUrl, templateId);
       resTemplates.push({
         id: templateId,
-        canonicalUrl: r.url,
-        title: r.title,
-        type: r.type,
+        canonicalUrl,
+        title: r.title || 'Untitled Resource',
+        type: r.type || 'DOCUMENTATION',
         freeStatus: r.freeStatus,
         estimatedHours: r.estimatedHours,
         description: r.description,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt
+        createdAt: r.createdAt || new Date(),
+        updatedAt: r.updatedAt || new Date()
       });
     }
 
@@ -182,13 +186,13 @@ db.version(5).stores({
       role: r.scopeInstructions, // map instructions to role temporarily
       status: 'planned',
       order: r.order,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt
+      createdAt: r.createdAt || new Date(),
+      updatedAt: r.updatedAt || new Date()
     });
   }
 
-  if (resTemplates.length > 0) await tx.table('resourceTemplates').bulkAdd(resTemplates);
-  if (selections.length > 0) await tx.table('userResourceSelections').bulkAdd(selections);
+  if (resTemplates.length > 0) await tx.table('resourceTemplates').bulkPut(resTemplates);
+  if (selections.length > 0) await tx.table('userResourceSelections').bulkPut(selections);
 });
 
 export { db };
