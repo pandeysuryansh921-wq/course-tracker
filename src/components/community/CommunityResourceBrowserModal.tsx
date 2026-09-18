@@ -30,12 +30,10 @@ interface CommunityFeaturedResource {
   type: 'video' | 'article' | 'textbook' | 'pdf';
   role: string;
   category: string;
-  communityRating: number;
-  communityVotes: number;
   description: string;
 }
 
-// Curated high-confidence community resource recommendations
+// Curated high-confidence educational recommendations
 const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
   {
     id: 'comm_3b1b_linear_algebra',
@@ -44,8 +42,6 @@ const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
     type: 'video',
     role: 'VISUAL',
     category: 'Mathematics & AI',
-    communityRating: 4.9,
-    communityVotes: 320,
     description: 'A geometric, intuitive foundation for vectors, matrices, determinants, and eigenvectors.'
   },
   {
@@ -55,8 +51,6 @@ const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
     type: 'video',
     role: 'PRIMARY',
     category: 'Computer Science',
-    communityRating: 4.8,
-    communityVotes: 245,
     description: 'Complete rigorous course on sorting, trees, hashing, dynamic programming, and graphs.'
   },
   {
@@ -66,8 +60,6 @@ const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
     type: 'video',
     role: 'PRIMARY',
     category: 'Machine Learning',
-    communityRating: 5.0,
-    communityVotes: 512,
     description: 'Building micrograd, makemore, and GPT from scratch with deep backpropagation derivations.'
   },
   {
@@ -77,8 +69,6 @@ const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
     type: 'textbook',
     role: 'PRACTICE',
     category: 'Software Engineering',
-    communityRating: 4.9,
-    communityVotes: 188,
     description: 'Handbook on compiler design, scanning, parsing, ASTs, bytecode, and virtual machines.'
   },
   {
@@ -88,8 +78,6 @@ const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
     type: 'pdf',
     role: 'REFERENCE',
     category: 'Machine Learning',
-    communityRating: 4.7,
-    communityVotes: 142,
     description: 'Concise mathematical derivations of supervised and unsupervised learning algorithms.'
   }
 ];
@@ -215,10 +203,9 @@ export function CommunityResourceBrowserModal({ isOpen, onClose }: CommunityReso
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 text-amber-500 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full text-xs font-bold shrink-0">
-                  <Star className="w-3.5 h-3.5 fill-current" />
-                  <span>{item.communityRating}</span>
-                  <span className="text-[10px] text-slate-400 font-normal">({item.communityVotes})</span>
+                <div className="flex items-center gap-1 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40 px-2 py-0.5 rounded-full text-xs font-medium shrink-0 border border-violet-200 dark:border-violet-800/40">
+                  <Sparkles className="w-3 h-3" />
+                  <span>Curated</span>
                 </div>
               </div>
 
