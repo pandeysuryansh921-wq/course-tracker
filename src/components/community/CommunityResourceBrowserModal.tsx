@@ -15,7 +15,10 @@ import {
   BookOpen, 
   Globe, 
   Sparkles,
-  Filter
+  Filter,
+  Upload,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 interface CommunityResourceBrowserModalProps {
@@ -84,14 +87,115 @@ const FEATURED_COMMUNITY_RESOURCES: CommunityFeaturedResource[] = [
 
 export function CommunityResourceBrowserModal({ isOpen, onClose }: CommunityResourceBrowserModalProps) {
   const { courses, topics, addResource } = useCurriculumStore();
+  const [resources, setResources] = useState<CommunityFeaturedResource[]>(FEATURED_COMMUNITY_RESOURCES);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedTopicId, setSelectedTopicId] = useState('');
   const [addedMap, setAddedMap] = useState<Record<string, boolean>>({});
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const categories = ['All', 'Machine Learning', 'Mathematics & AI', 'Computer Science', 'Software Engineering'];
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const fetchLiveCommunity = async () => {
+      try {
+        setIsLoadingLive(true);
+        const res = await fetch('https://raw.githubusercontent.com/pandeysuryansh921-wq/degree-track-library/main/resources.json');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            const parsed: CommunityFeaturedResource[] = data.map((item: any, idx: number) => {
+              if (item.version === 'degreetrack.community.v1' && item.resource) {
+                return {
+                  id: `comm_live_${idx}_${item.resource.canonicalUrl?.slice(-8) || idx}`,
+                  title: item.resource.title,
+                  url: item.resource.canonicalUrl,
+                  type: (item.resource.type?.toLowerCase() || 'article') as any,
+                  role: item.resource.role || 'PRIMARY',
+                  category: item.context?.topics?.[0] || 'Community',
+                  description: item.resource.description || `Community resource with confidence ${item.metrics?.confidenceScore || 0}`
+                };
+              }
+              return item;
+            }).filter((r: any) => r && r.url && (r.url.startsWith('http://') || r.url.startsWith('https://')));
 
-  const filtered = FEATURED_COMMUNITY_RESOURCES.filter(item => {
+            const existingUrls = new Set(FEATURED_COMMUNITY_RESOURCES.map(r => r.url));
+            const fresh = parsed.filter(p => !existingUrls.has(p.url));
+            setResources([...FEATURED_COMMUNITY_RESOURCES, ...fresh]);
+          }
+        }
+      } catch {
+        // Fallback silently to curated resources
+      } finally {
+        setIsLoadingLive(false);
+      }
+    };
+
+    fetchLiveCommunity();
+  }, [isOpen]);
+
+  const handleImportJsonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const itemsToAdd: CommunityFeaturedResource[] = [];
+
+      const processItem = (item: any, idx: number) => {
+        if (item.version === 'degreetrack.community.v1' && item.resource) {
+          itemsToAdd.push({
+            id: `comm_import_${Date.now()}_${idx}`,
+            title: item.resource.title,
+            url: item.resource.canonicalUrl,
+            type: (item.resource.type?.toLowerCase() || 'article') as any,
+            role: item.resource.role || 'PRIMARY',
+            category: item.context?.topics?.[0] || 'Imported',
+            description: item.resource.description || 'Imported community resource'
+          });
+        } else if (item.url && item.title) {
+          itemsToAdd.push({
+            id: `comm_import_${Date.now()}_${idx}`,
+            title: item.title,
+            url: item.url,
+            type: (item.type?.toLowerCase() || 'article') as any,
+            role: item.role || 'PRIMARY',
+            category: item.category || 'Imported',
+            description: item.description || 'Imported community resource'
+          });
+        }
+      };
+
+      if (parsed.version === 'degreetrack.community.v1' && Array.isArray(parsed.resources)) {
+        parsed.resources.forEach((r: any, i: number) => processItem(r, i));
+      } else if (Array.isArray(parsed)) {
+        parsed.forEach((r: any, i: number) => processItem(r, i));
+      } else {
+        processItem(parsed, 0);
+      }
+
+      if (itemsToAdd.length === 0) {
+        setImportStatus("No valid resources found in file.");
+      } else {
+        setResources(prev => {
+          const urls = new Set(prev.map(p => p.url));
+          const unique = itemsToAdd.filter(it => !urls.has(it.url));
+          return [...unique, ...prev];
+        });
+        setImportStatus(`Imported ${itemsToAdd.length} resource(s) from file!`);
+      }
+      setTimeout(() => setImportStatus(null), 4000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) {
+      setImportStatus(`Invalid JSON file: ${err.message}`);
+      setTimeout(() => setImportStatus(null), 4000);
+    }
+  };
+
+  const categories = ['All', 'Machine Learning', 'Mathematics & AI', 'Computer Science', 'Software Engineering', 'Community', 'Imported'];
+
+  const filtered = resources.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(search.toLowerCase()) || 
                           item.description.toLowerCase().includes(search.toLowerCase());
     const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
@@ -124,15 +228,42 @@ export function CommunityResourceBrowserModal({ isOpen, onClose }: CommunityReso
     <Modal isOpen={isOpen} onClose={onClose} title="Community Resource Hub">
       <div className="flex flex-col gap-5">
         {/* Banner */}
-        <div className="flex items-center gap-3 p-3.5 bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30 border border-violet-200 dark:border-violet-800/40 rounded-xl">
-          <Sparkles className="w-5 h-5 text-violet-600 dark:text-violet-400 shrink-0" />
-          <div className="text-xs text-slate-700 dark:text-slate-300">
-            <span className="font-semibold block text-slate-900 dark:text-slate-100">
-              Crowd-Sourced Intelligence & Resource Confidence
-            </span>
-            Explore high-effectiveness materials tested and rated by learners across the DegreeTrack ecosystem.
+        <div className="flex items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-violet-50 to-blue-50 dark:from-violet-950/30 dark:to-blue-950/30 border border-violet-200 dark:border-violet-800/40 rounded-xl">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-violet-600 dark:text-violet-400 shrink-0" />
+            <div className="text-xs text-slate-700 dark:text-slate-300">
+              <span className="font-semibold block text-slate-900 dark:text-slate-100">
+                Crowd-Sourced Intelligence & Resource Confidence
+              </span>
+              Explore high-effectiveness materials tested and rated by learners across the DegreeTrack ecosystem.
+            </div>
+          </div>
+          
+          <div>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              accept=".json" 
+              className="hidden" 
+              onChange={handleImportJsonFile} 
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium whitespace-nowrap shadow-sm transition-colors"
+              title="Import resources from a community .json payload file"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import JSON</span>
+            </button>
           </div>
         </div>
+
+        {importStatus && (
+          <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-800 dark:text-blue-300">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{importStatus}</span>
+          </div>
+        )}
 
         {/* Filter and Search */}
         <div className="flex flex-col sm:flex-row gap-2.5">

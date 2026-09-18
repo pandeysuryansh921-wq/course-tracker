@@ -111,6 +111,48 @@ export const importCourseFromZip = async (file: File) => {
     data = JSON.parse(jsonContent);
   }
 
+  // Normalize degreetrack.curriculum.v1 (sanitized community curriculum format) if applicable
+  if (data && data.course && data.topics && (!data.resources || !Array.isArray(data.resources))) {
+    const courseId = data.course.id || generateId();
+    data.course.id = courseId;
+    data.course.name = data.course.name || data.course.title || "Community Course";
+
+    if (!data.modules) data.modules = [];
+    data.modules = data.modules.map((m: any) => ({
+      ...m,
+      id: m.id || generateId(),
+      courseId: m.courseId || courseId,
+      name: m.name || m.title || "Module"
+    }));
+
+    const extractedResources: any[] = [];
+    data.topics = data.topics.map((t: any) => {
+      const topicId = t.id || generateId();
+      if (t.resources && Array.isArray(t.resources)) {
+        t.resources.forEach((r: any) => {
+          extractedResources.push({
+            id: generateId(),
+            topicId,
+            title: r.title || 'Resource',
+            url: r.url || '',
+            type: r.type || 'DOCUMENTATION',
+            scopeInstructions: r.role || 'PRIMARY'
+          });
+        });
+      }
+      return {
+        ...t,
+        id: topicId,
+        courseId: t.courseId || courseId,
+        name: t.name || t.title || "Topic"
+      };
+    });
+
+    data.resources = extractedResources;
+    if (!data.practice) data.practice = [];
+    if (!data.projects) data.projects = [];
+  }
+
   if (!data.course || !data.modules || !data.topics || !data.resources) {
     throw new Error("Invalid package format");
   }
