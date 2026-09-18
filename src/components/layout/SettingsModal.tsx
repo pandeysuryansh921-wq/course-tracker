@@ -7,8 +7,9 @@ import { useThemeStore } from '@/stores/useThemeStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
 import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
-import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network, Users, ShieldCheck } from 'lucide-react';
+import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network, Users, ShieldCheck, Send } from 'lucide-react';
 import { CommunityLibraryModal } from './CommunityLibraryModal';
+import { sanitizeCourseCurriculum, publishToCommunityOneTap } from '@/lib/community';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
+  const [isCommunityPublishing, setIsCommunityPublishing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -92,6 +94,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setError(err.message || "Failed to export course");
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleOneTapPublishCourse = async () => {
+    if (!selectedCourseId) return;
+    try {
+      setIsCommunityPublishing(true);
+      setError(null);
+      const course = courses.find(c => c.id === selectedCourseId);
+      const sanitized = await sanitizeCourseCurriculum(selectedCourseId);
+      const res = await publishToCommunityOneTap(sanitized, course?.name || 'Course Curriculum');
+      setSuccess(res.message);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      setError(err.message || "Failed to publish course to community");
+    } finally {
+      setIsCommunityPublishing(false);
     }
   };
 
@@ -183,14 +202,26 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <button
-                onClick={handleExport}
-                disabled={!selectedCourseId || isExporting}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg transition-transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none font-medium whitespace-nowrap"
-              >
-                <Download size={18} />
-                <span className="font-medium">{isExporting ? 'Exporting...' : 'Export'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOneTapPublishCourse}
+                  disabled={!selectedCourseId || isCommunityPublishing}
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white rounded-lg transition-transform active:scale-95 disabled:opacity-50 font-medium whitespace-nowrap text-sm shadow-sm"
+                  title="1-Tap export sanitized course to community"
+                >
+                  {isCommunityPublishing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  <span>{isCommunityPublishing ? 'Publishing...' : '1-Tap to Community'}</span>
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={!selectedCourseId || isExporting}
+                  className="flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg transition-transform active:scale-95 disabled:opacity-50 font-medium whitespace-nowrap text-sm"
+                  title="Download .zip course package"
+                >
+                  <Download size={16} />
+                  <span>{isExporting ? 'Exporting...' : 'Download .zip'}</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

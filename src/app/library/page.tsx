@@ -16,7 +16,9 @@ import {
   Sparkles, 
   Download,
   ShieldCheck,
-  Check
+  Check,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { Resource, ResourceMapping } from '@/types/curriculum';
 import { db } from '@/lib/db';
@@ -24,6 +26,7 @@ import {
   sanitizeResourceForCommunity, 
   generateCommunityResourceManifest, 
   downloadJsonFile, 
+  publishToCommunityOneTap,
   CommunityResourcePayload 
 } from '@/lib/community';
 import { PublishResourceModal } from '@/components/community/PublishResourceModal';
@@ -40,12 +43,14 @@ export default function LibraryPage() {
   const [mappingsList, setMappingsList] = useState<ResourceMapping[]>([]);
   const [templatesMap, setTemplatesMap] = useState<Map<string, string>>(new Map());
 
-  // Community modals state
+  // Community modals & 1-tap state
   const [publishPayload, setPublishPayload] = useState<CommunityResourcePayload | null>(null);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isBrowserModalOpen, setIsBrowserModalOpen] = useState(false);
   const [isExportingManifest, setIsExportingManifest] = useState(false);
   const [manifestSuccess, setManifestSuccess] = useState(false);
+  const [isOneTapPublishingAll, setIsOneTapPublishingAll] = useState(false);
+  const [oneTapFeedback, setOneTapFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -114,6 +119,33 @@ export default function LibraryPage() {
     }
   };
 
+  const handleOneTapPublishAll = async () => {
+    try {
+      setIsOneTapPublishingAll(true);
+      const manifest = await generateCommunityResourceManifest();
+      const res = await publishToCommunityOneTap(manifest, 'Full Resource Catalog');
+      setOneTapFeedback(res.message);
+      setTimeout(() => setOneTapFeedback(null), 5000);
+    } catch (err: any) {
+      alert(`1-Tap Publish error: ${err.message}`);
+    } finally {
+      setIsOneTapPublishingAll(false);
+    }
+  };
+
+  const handleOneTapShareSingle = async (base: Resource, uses: { topic: string }[]) => {
+    const mapping = mappingsList.find(m => m.resourceId === base.resourceId);
+    const relatedTopicNames = uses.map(u => u.topic);
+    try {
+      const payload = await sanitizeResourceForCommunity(base, mapping, relatedTopicNames);
+      const res = await publishToCommunityOneTap(payload, base.title);
+      setOneTapFeedback(`"${base.title}": ${res.message}`);
+      setTimeout(() => setOneTapFeedback(null), 5000);
+    } catch (err: any) {
+      alert(`1-Tap Share error: ${err.message}`);
+    }
+  };
+
   const handleExportManifest = async () => {
     try {
       setIsExportingManifest(true);
@@ -141,6 +173,14 @@ export default function LibraryPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* 1-Tap Feedback Alert */}
+      {oneTapFeedback && (
+        <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-medium text-emerald-900 dark:text-emerald-200 shadow-sm animate-in fade-in">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{oneTapFeedback}</span>
+        </div>
+      )}
+
       {/* Header with Community Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -159,20 +199,30 @@ export default function LibraryPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsBrowserModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5 text-violet-500" />
             <span>Community Hub</span>
+          </button>
+
+          <button
+            onClick={handleOneTapPublishAll}
+            disabled={isOneTapPublishingAll || uniqueResources.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            title="1-Tap export and publish all resources to community"
+          >
+            {isOneTapPublishingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            <span>{isOneTapPublishingAll ? 'Publishing...' : '1-Tap Publish All'}</span>
           </button>
 
           <button
             onClick={handleExportManifest}
             disabled={isExportingManifest || uniqueResources.length === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700 disabled:opacity-50"
             title="Export full community resource manifest (100% sanitized)"
           >
-            {manifestSuccess ? <Check className="w-4 h-4 text-emerald-500" /> : <Download className="w-4 h-4" />}
-            <span>{manifestSuccess ? 'Exported!' : 'Export Manifest'}</span>
+            {manifestSuccess ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Download className="w-3.5 h-3.5" />}
+            <span>{manifestSuccess ? 'Exported!' : 'Manifest'}</span>
           </button>
         </div>
       </div>
@@ -237,15 +287,24 @@ export default function LibraryPage() {
                     Used in {uses.length} topic{uses.length > 1 ? 's' : ''}
                   </p>
 
-                  {/* Share to Community button */}
-                  <button
-                    onClick={() => handleShareToCommunity(base, uses)}
-                    className="flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700/50"
-                    title="Share sanitized resource to community"
-                  >
-                    <Share2 className="w-3 h-3" />
-                    <span>Share</span>
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOneTapShareSingle(base, uses)}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 transition-colors px-2 py-0.5 rounded-lg bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 border border-violet-200 dark:border-violet-800/40"
+                      title="1-Tap export this resource to community"
+                    >
+                      <Send className="w-2.5 h-2.5" />
+                      <span>1-Tap</span>
+                    </button>
+                    <button
+                      onClick={() => handleShareToCommunity(base, uses)}
+                      className="flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700/50"
+                      title="Preview sanitized community manifest"
+                    >
+                      <Share2 className="w-3 h-3" />
+                      <span>Preview</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 max-h-[85px] overflow-y-auto pr-1 custom-scrollbar">

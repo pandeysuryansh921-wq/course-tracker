@@ -278,6 +278,8 @@ export interface UserProfile {
   useExternalTimer?: boolean; 
   useExternalFlashcards?: boolean; 
   communityPublishingEnabled?: boolean;
+  communityWebhookUrl?: string;
+  communityGithubToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }

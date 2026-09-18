@@ -280,3 +280,123 @@ export function downloadJsonFile(data: any, filename: string): void {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export interface OneTapPublishResult {
+  success: boolean;
+  method: 'github_api' | 'webhook' | 'github_prefill';
+  message: string;
+  url?: string;
+}
+
+export const COMMUNITY_REPO = 'pandeysuryansh921-wq/degree-track-library';
+
+/**
+ * 1-Tap Community Export & Publishing:
+ * 1. Automatically verifies that payload passes the Privacy Firewall.
+ * 2. If GitHub Token or Webhook is configured, directly pushes via API without extra steps.
+ * 3. Otherwise: Copies sanitized JSON, downloads local backup, and launches GitHub submission page pre-filled!
+ */
+export async function publishToCommunityOneTap(
+  payload: CommunityResourcePayload | SanitizedCurriculumPayload | CommunityManifestPayload,
+  title: string,
+  options?: {
+    webhookUrl?: string;
+    githubToken?: string;
+  }
+): Promise<OneTapPublishResult> {
+  // 1. Mandatory Privacy Firewall Verification
+  verifySanitization(payload);
+
+  const jsonString = JSON.stringify(payload, null, 2);
+  const safeFilename = title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 35) + '.json';
+
+  // 2. Direct GitHub REST API (if token available)
+  const token = options?.githubToken || (typeof window !== 'undefined' ? localStorage.getItem('degreetrack_community_token') : null);
+  if (token) {
+    try {
+      const path = `submissions/${safeFilename}`;
+      const contentBase64 = typeof window !== 'undefined' && window.btoa 
+        ? window.btoa(unescape(encodeURIComponent(jsonString))) 
+        : Buffer.from(jsonString).toString('base64');
+      
+      const res = await fetch(`https://api.github.com/repos/${COMMUNITY_REPO}/contents/${path}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `feat(community): 1-tap submission of ${title}`,
+          content: contentBase64,
+          branch: 'main'
+        })
+      });
+
+      if (res.ok) {
+        return {
+          success: true,
+          method: 'github_api',
+          message: `1-Tap Published directly to ${COMMUNITY_REPO}!`,
+          url: `https://github.com/${COMMUNITY_REPO}/blob/main/${path}`
+        };
+      }
+    } catch (err) {
+      console.warn('Direct GitHub API push failed, falling back to prefill:', err);
+    }
+  }
+
+  // 3. Direct Webhook (if configured)
+  const webhook = options?.webhookUrl || (typeof window !== 'undefined' ? localStorage.getItem('degreetrack_community_webhook') : null);
+  if (webhook) {
+    try {
+      const res = await fetch(webhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonString
+      });
+
+      if (res.ok) {
+        return {
+          success: true,
+          method: 'webhook',
+          message: `1-Tap Submitted to community webhook successfully!`
+        };
+      }
+    } catch (err) {
+      console.warn('Webhook submission failed, falling back:', err);
+    }
+  }
+
+  // 4. Default 1-Tap Zero-Config: Clipboard + Local Backup Download + Prefilled GitHub Issue
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    await navigator.clipboard.writeText(jsonString).catch(() => {});
+  }
+
+  downloadJsonFile(payload, safeFilename);
+
+  const issueTitle = encodeURIComponent(`[Community Submission]: ${title}`);
+  const issueBody = encodeURIComponent(
+`### Community Resource / Curriculum Submission
+**Item:** ${title}
+**Exported At:** ${new Date().toISOString()}
+
+\`\`\`json
+${jsonString.length > 3500 ? jsonString.substring(0, 3500) + '\n... [truncated for URL size, full JSON copied to clipboard & downloaded]' : jsonString}
+\`\`\`
+
+> *Verified 100% sanitized by DegreeTrack Privacy Firewall.*`
+  );
+
+  const prefillUrl = `https://github.com/${COMMUNITY_REPO}/issues/new?title=${issueTitle}&body=${issueBody}`;
+  if (typeof window !== 'undefined') {
+    window.open(prefillUrl, '_blank');
+  }
+
+  return {
+    success: true,
+    method: 'github_prefill',
+    message: `1-Tap Export Complete! Copied to clipboard, downloaded, and opened in GitHub!`,
+    url: prefillUrl
+  };
+}
