@@ -288,7 +288,7 @@ export interface OneTapPublishResult {
   url?: string;
 }
 
-export const COMMUNITY_REPO = 'pandeysuryansh921-wq/degree-track-library';
+export const COMMUNITY_REPO = 'pandeysuryansh921-wq/course-tracker-library';
 
 /**
  * 1-Tap Community Export & Publishing:

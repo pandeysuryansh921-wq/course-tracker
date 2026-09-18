@@ -19,8 +19,8 @@ interface CommunityLibraryModalProps {
   onClose: () => void;
 }
 
-const LIBRARY_JSON_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/degree-track-library/main/courses.json';
-const RAW_REPO_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/degree-track-library/main';
+const LIBRARY_JSON_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/courses.json';
+const RAW_REPO_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main';
 
 export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModalProps) {
   const [courses, setCourses] = useState<CommunityCourse[]>([]);

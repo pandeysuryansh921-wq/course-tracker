@@ -101,7 +101,7 @@ export function CommunityResourceBrowserModal({ isOpen, onClose }: CommunityReso
     const fetchLiveCommunity = async () => {
       try {
         setIsLoadingLive(true);
-        const res = await fetch('https://raw.githubusercontent.com/pandeysuryansh921-wq/degree-track-library/main/resources.json');
+        const res = await fetch('https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/resources.json');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
