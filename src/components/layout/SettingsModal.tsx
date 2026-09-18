@@ -7,7 +7,7 @@ import { useThemeStore } from '@/stores/useThemeStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
 import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
-import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network } from 'lucide-react';
+import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network, Users, ShieldCheck } from 'lucide-react';
 import { CommunityLibraryModal } from './CommunityLibraryModal';
 
 interface SettingsModalProps {
@@ -311,6 +311,47 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Community Publishing Section */}
+        <div className="flex flex-col gap-3 pb-6 border-b border-border">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-[var(--text-main)] flex items-center gap-2">
+              <Users size={18} /> Community & Ecosystem
+            </h3>
+            <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">
+              <ShieldCheck size={12} /> Privacy Firewall
+            </span>
+          </div>
+
+          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+            Contribute high-confidence educational links and anonymous effectiveness ratings to help fellow self-directed learners.
+          </p>
+
+          <button
+            onClick={() => {
+              if (profile) {
+                updateProfileSettings({ communityPublishingEnabled: !profile.communityPublishingEnabled });
+              }
+            }}
+            className="flex items-center justify-between w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-left"
+          >
+            <div className="flex flex-col">
+              <span className="font-medium text-slate-900 dark:text-slate-100 text-sm">
+                Enable Community Resource Sharing
+              </span>
+              <span className="text-xs text-slate-500">
+                Allows sharing sanitized resource ratings from the Library
+              </span>
+            </div>
+            <div className={`w-10 h-6 rounded-full relative transition-colors shrink-0 ${profile?.communityPublishingEnabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${profile?.communityPublishingEnabled ? 'left-5' : 'left-1'}`} />
+            </div>
+          </button>
+
+          <div className="p-2.5 bg-slate-100/70 dark:bg-slate-800/40 rounded-lg border border-slate-200/60 dark:border-slate-700/50 text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+            <strong>🔒 Privacy Guarantee:</strong> Personal study progress, timestamps, quiz answers, and notes are strictly excluded. Only educational links and crowd confidence scores can be exported.
+          </div>
         </div>
 
         {/* Theme Toggle */}

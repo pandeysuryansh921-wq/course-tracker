@@ -277,6 +277,7 @@ export interface UserProfile {
   ecosystemMode?: boolean; 
   useExternalTimer?: boolean; 
   useExternalFlashcards?: boolean; 
+  communityPublishingEnabled?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
