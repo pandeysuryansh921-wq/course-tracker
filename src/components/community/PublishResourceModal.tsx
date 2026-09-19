@@ -15,6 +15,7 @@ export function PublishResourceModal({ isOpen, onClose, payload }: PublishResour
   const [copied, setCopied] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!payload) return null;
 
@@ -33,11 +34,13 @@ export function PublishResourceModal({ isOpen, onClose, payload }: PublishResour
     try {
       setIsPublishing(true);
       setPublishMessage(null);
+      setErrorMessage(null);
       const res = await publishToCommunityOneTap(payload, payload.resource.title);
       setPublishMessage(res.message);
-      setTimeout(() => setPublishMessage(null), 5000);
+      setTimeout(() => setPublishMessage(null), 7000);
     } catch (err: any) {
-      alert(`Publish error: ${err.message}`);
+      setErrorMessage(err.message || 'Failed to submit resource.');
+      setTimeout(() => setErrorMessage(null), 7000);
     } finally {
       setIsPublishing(false);
     }
@@ -61,6 +64,13 @@ export function PublishResourceModal({ isOpen, onClose, payload }: PublishResour
           <div className="flex items-center gap-2 p-3 bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 animate-in fade-in">
             <Check className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{publishMessage}</span>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-800 dark:text-red-300 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorMessage}</span>
           </div>
         )}
 

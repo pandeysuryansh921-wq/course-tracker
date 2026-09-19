@@ -127,7 +127,8 @@ export default function LibraryPage() {
       setOneTapFeedback(res.message);
       setTimeout(() => setOneTapFeedback(null), 5000);
     } catch (err: any) {
-      alert(`1-Tap Publish error: ${err.message}`);
+      setOneTapFeedback(`1-Tap Publish error: ${err.message}`);
+      setTimeout(() => setOneTapFeedback(null), 6000);
     } finally {
       setIsOneTapPublishingAll(false);
     }
@@ -140,9 +141,10 @@ export default function LibraryPage() {
       const payload = await sanitizeResourceForCommunity(base, mapping, relatedTopicNames);
       const res = await publishToCommunityOneTap(payload, base.title);
       setOneTapFeedback(`"${base.title}": ${res.message}`);
-      setTimeout(() => setOneTapFeedback(null), 5000);
+      setTimeout(() => setOneTapFeedback(null), 6000);
     } catch (err: any) {
-      alert(`1-Tap Share error: ${err.message}`);
+      setOneTapFeedback(`"${base.title}": ${err.message}`);
+      setTimeout(() => setOneTapFeedback(null), 6000);
     }
   };
 

@@ -96,43 +96,82 @@ export function CommunityResourceBrowserModal({ isOpen, onClose }: CommunityReso
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const MANIFEST_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/community/manifest.json';
+  const RESOURCES_INDEX_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/community/resources/index.json';
+  const FALLBACK_RESOURCES_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/resources.json';
+
+  const fetchLiveCommunity = async (forceRefresh: boolean = false) => {
+    try {
+      setIsLoadingLive(true);
+
+      // Check cached version
+      const cachedVersion = localStorage.getItem('degreetrack_resources_version');
+      const cachedData = localStorage.getItem('degreetrack_resources_cache');
+
+      if (!forceRefresh && cachedVersion && cachedData) {
+        try {
+          const mRes = await fetch(`${MANIFEST_URL}?t=${Date.now()}`);
+          if (mRes.ok) {
+            const m = await mRes.json();
+            if (m.libraryVersion === Number(cachedVersion)) {
+              setResources(JSON.parse(cachedData));
+              setIsLoadingLive(false);
+              return;
+            }
+          }
+        } catch {
+          // Fall through to live fetch
+        }
+      }
+
+      let res = await fetch(`${RESOURCES_INDEX_URL}?t=${Date.now()}`);
+      if (!res.ok) {
+        res = await fetch(`${FALLBACK_RESOURCES_URL}?t=${Date.now()}`);
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const parsed: CommunityFeaturedResource[] = data.map((item: any, idx: number) => {
+            if (item.version === 'degreetrack.community.v1' && item.resource) {
+              return {
+                id: `comm_live_${idx}_${item.resource.canonicalUrl?.slice(-8) || idx}`,
+                title: item.resource.title,
+                url: item.resource.canonicalUrl,
+                type: (item.resource.type?.toLowerCase() || 'article') as any,
+                role: item.resource.role || 'PRIMARY',
+                category: item.context?.topics?.[0] || 'Community',
+                description: item.resource.description || `Community resource with confidence ${item.metrics?.confidenceScore || 0}`
+              };
+            }
+            return item;
+          }).filter((r: any) => r && r.url && (r.url.startsWith('http://') || r.url.startsWith('https://')));
+
+          const existingUrls = new Set(FEATURED_COMMUNITY_RESOURCES.map(r => r.url));
+          const fresh = parsed.filter(p => !existingUrls.has(p.url));
+          const merged = [...FEATURED_COMMUNITY_RESOURCES, ...fresh];
+          setResources(merged);
+
+          localStorage.setItem('degreetrack_resources_cache', JSON.stringify(merged));
+          try {
+            const mRes = await fetch(`${MANIFEST_URL}?t=${Date.now()}`);
+            if (mRes.ok) {
+              const m = await mRes.json();
+              localStorage.setItem('degreetrack_resources_version', String(m.libraryVersion || 1));
+            }
+          } catch {}
+        }
+      }
+    } catch {
+      // Fallback silently to curated resources
+    } finally {
+      setIsLoadingLive(false);
+    }
+  };
+
   React.useEffect(() => {
     if (!isOpen) return;
-    const fetchLiveCommunity = async () => {
-      try {
-        setIsLoadingLive(true);
-        const res = await fetch('https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/resources.json');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const parsed: CommunityFeaturedResource[] = data.map((item: any, idx: number) => {
-              if (item.version === 'degreetrack.community.v1' && item.resource) {
-                return {
-                  id: `comm_live_${idx}_${item.resource.canonicalUrl?.slice(-8) || idx}`,
-                  title: item.resource.title,
-                  url: item.resource.canonicalUrl,
-                  type: (item.resource.type?.toLowerCase() || 'article') as any,
-                  role: item.resource.role || 'PRIMARY',
-                  category: item.context?.topics?.[0] || 'Community',
-                  description: item.resource.description || `Community resource with confidence ${item.metrics?.confidenceScore || 0}`
-                };
-              }
-              return item;
-            }).filter((r: any) => r && r.url && (r.url.startsWith('http://') || r.url.startsWith('https://')));
-
-            const existingUrls = new Set(FEATURED_COMMUNITY_RESOURCES.map(r => r.url));
-            const fresh = parsed.filter(p => !existingUrls.has(p.url));
-            setResources([...FEATURED_COMMUNITY_RESOURCES, ...fresh]);
-          }
-        }
-      } catch {
-        // Fallback silently to curated resources
-      } finally {
-        setIsLoadingLive(false);
-      }
-    };
-
-    fetchLiveCommunity();
+    fetchLiveCommunity(false);
   }, [isOpen]);
 
   const handleImportJsonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,14 +286,25 @@ export function CommunityResourceBrowserModal({ isOpen, onClose }: CommunityReso
               className="hidden" 
               onChange={handleImportJsonFile} 
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium whitespace-nowrap shadow-sm transition-colors"
-              title="Import resources from a community .json payload file"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Import JSON</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => fetchLiveCommunity(true)}
+                disabled={isLoadingLive}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium whitespace-nowrap shadow-sm transition-colors"
+                title="Refresh community resources"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLive ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium whitespace-nowrap shadow-sm transition-colors"
+                title="Import resources from a community .json payload file"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Import JSON</span>
+              </button>
+            </div>
           </div>
         </div>
 

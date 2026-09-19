@@ -70,20 +70,22 @@ export interface SanitizedCurriculumPayload {
 // Forbidden fields that MUST NEVER be exported to the community
 const FORBIDDEN_KEYS = [
   'notes',
-  'quizScore',
-  'masteryScore',
-  'isCompleted',
-  'isMastered',
-  'nextReviewDate',
-  'userProfile',
+  'personalnotes',
+  'quizscore',
+  'quizscores',
+  'masteryscore',
+  'masterypercentage',
+  'iscompleted',
+  'ismastered',
+  'nextreviewdate',
+  'userprofile',
   'email',
-  'name',
-  'userId',
-  'startedAt',
-  'endedAt',
-  'studySessions',
+  'userid',
+  'startedat',
+  'endedat',
+  'studysessions',
   'flashcards',
-  'externalLinks'
+  'submissionfile'
 ];
 
 /**
@@ -98,8 +100,9 @@ export function verifySanitization(obj: any, path: string = ''): void {
   }
 
   for (const key of Object.keys(obj)) {
+    const lowerKey = key.toLowerCase().replace(/[^a-z]/g, '');
     const currentPath = path ? `${path}.${key}` : key;
-    if (FORBIDDEN_KEYS.includes(key)) {
+    if (FORBIDDEN_KEYS.includes(lowerKey)) {
       throw new Error(`[Privacy Firewall Violation] Forbidden private key detected: "${currentPath}". Export aborted.`);
     }
     verifySanitization(obj[key], currentPath);
@@ -283,8 +286,10 @@ export function downloadJsonFile(data: any, filename: string): void {
 
 export interface OneTapPublishResult {
   success: boolean;
-  method: 'github_api' | 'webhook' | 'github_prefill';
+  method: 'serverless_api' | 'webhook' | 'local_backup';
   message: string;
+  submissionId?: string;
+  issueNumber?: number;
   url?: string;
 }
 
@@ -292,111 +297,59 @@ export const COMMUNITY_REPO = 'pandeysuryansh921-wq/course-tracker-library';
 
 /**
  * 1-Tap Community Export & Publishing:
- * 1. Automatically verifies that payload passes the Privacy Firewall.
- * 2. If GitHub Token or Webhook is configured, directly pushes via API without extra steps.
- * 3. Otherwise: Copies sanitized JSON, downloads local backup, and launches GitHub submission page pre-filled!
+ * 1. Automatically verifies that payload passes the Client Privacy Firewall.
+ * 2. Directly submits to the serverless /api/community/submit endpoint.
+ * 3. Returns immediate confirmation with submission ID (#GH-xxx).
+ * 4. Zero popups, zero clipboard, zero GitHub account required from contributor.
  */
 export async function publishToCommunityOneTap(
   payload: CommunityResourcePayload | SanitizedCurriculumPayload | CommunityManifestPayload,
-  title: string,
-  options?: {
-    webhookUrl?: string;
-    githubToken?: string;
-  }
+  title: string
 ): Promise<OneTapPublishResult> {
-  // 1. Mandatory Privacy Firewall Verification
+  // 1. Mandatory Client-side Privacy Firewall Verification
   verifySanitization(payload);
 
-  const jsonString = JSON.stringify(payload, null, 2);
-  const safeFilename = title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 35) + '.json';
+  let type: 'course' | 'resource' | 'batch' = 'resource';
+  if ((payload as any).course) {
+    type = 'course';
+  } else if ((payload as any).resources && Array.isArray((payload as any).resources)) {
+    type = 'batch';
+  }
 
-  // 2. Direct GitHub REST API (if token available)
-  const token = options?.githubToken || (typeof window !== 'undefined' ? localStorage.getItem('degreetrack_community_token') : null);
-  if (token) {
-    try {
-      const path = `submissions/${safeFilename}`;
-      const contentBase64 = typeof window !== 'undefined' && window.btoa 
-        ? window.btoa(unescape(encodeURIComponent(jsonString))) 
-        : Buffer.from(jsonString).toString('base64');
-      
-      const res = await fetch(`https://api.github.com/repos/${COMMUNITY_REPO}/contents/${path}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: `feat(community): 1-tap submission of ${title}`,
-          content: contentBase64,
-          branch: 'main'
-        })
-      });
+  // 2. Call Serverless Community Submission Endpoint
+  try {
+    const endpoint = process.env.NEXT_PUBLIC_COMMUNITY_API_URL || '/api/community/submit';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        type,
+        payload
+      })
+    });
 
-      if (res.ok) {
-        return {
-          success: true,
-          method: 'github_api',
-          message: `1-Tap Published directly to ${COMMUNITY_REPO}!`,
-          url: `https://github.com/${COMMUNITY_REPO}/blob/main/${path}`
-        };
-      }
-    } catch (err) {
-      console.warn('Direct GitHub API push failed, falling back to prefill:', err);
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.error || `Server error (${res.status})`);
     }
+
+    return {
+      success: true,
+      method: 'serverless_api',
+      submissionId: data.submissionId,
+      issueNumber: data.issueNumber,
+      message: `✓ Submitted for community review (${data.submissionId || 'Pending'})! Automated verification is in progress.`,
+      url: data.issueUrl
+    };
+  } catch (err: any) {
+    // Save local backup file if offline/server unreachable so contributor work is never lost
+    const safeFilename = `backup_${title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30)}.json`;
+    downloadJsonFile(payload, safeFilename);
+
+    throw new Error(
+      `Community submission service error: ${err.message}. A local backup (${safeFilename}) was saved to your device.`
+    );
   }
-
-  // 3. Direct Webhook (if configured)
-  const webhook = options?.webhookUrl || (typeof window !== 'undefined' ? localStorage.getItem('degreetrack_community_webhook') : null);
-  if (webhook) {
-    try {
-      const res = await fetch(webhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: jsonString
-      });
-
-      if (res.ok) {
-        return {
-          success: true,
-          method: 'webhook',
-          message: `1-Tap Submitted to community webhook successfully!`
-        };
-      }
-    } catch (err) {
-      console.warn('Webhook submission failed, falling back:', err);
-    }
-  }
-
-  // 4. Default 1-Tap Zero-Config: Clipboard + Local Backup Download + Prefilled GitHub Issue
-  if (typeof navigator !== 'undefined' && navigator.clipboard) {
-    await navigator.clipboard.writeText(jsonString).catch(() => {});
-  }
-
-  downloadJsonFile(payload, safeFilename);
-
-  const issueTitle = encodeURIComponent(`[Community Submission]: ${title}`);
-  const issueBody = encodeURIComponent(
-`### Community Resource / Curriculum Submission
-**Item:** ${title}
-**Exported At:** ${new Date().toISOString()}
-
-\`\`\`json
-${jsonString.length > 3500 ? jsonString.substring(0, 3500) + '\n... [truncated for URL size, full JSON copied to clipboard & downloaded]' : jsonString}
-\`\`\`
-
-> *Verified 100% sanitized by DegreeTrack Privacy Firewall.*`
-  );
-
-  const prefillUrl = `https://github.com/${COMMUNITY_REPO}/issues/new?title=${issueTitle}&body=${issueBody}`;
-  if (typeof window !== 'undefined') {
-    window.open(prefillUrl, '_blank');
-  }
-
-  return {
-    success: true,
-    method: 'github_prefill',
-    message: `1-Tap Export Complete! Copied to clipboard, downloaded, and opened in GitHub!`,
-    url: prefillUrl
-  };
 }

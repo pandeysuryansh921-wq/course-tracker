@@ -4,14 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { importCourseFromZip } from '@/lib/exportImport';
-import { Download, AlertCircle, BookOpen, Loader2 } from 'lucide-react';
+import { Download, AlertCircle, BookOpen, Loader2, RefreshCw } from 'lucide-react';
 
 interface CommunityCourse {
   id: string;
   title: string;
   author: string;
   description: string;
-  filename: string;
+  filename?: string;
+  file?: string;
 }
 
 interface CommunityLibraryModalProps {
@@ -19,7 +20,9 @@ interface CommunityLibraryModalProps {
   onClose: () => void;
 }
 
-const LIBRARY_JSON_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/courses.json';
+const MANIFEST_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/community/manifest.json';
+const COURSES_INDEX_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/community/courses/index.json';
+const FALLBACK_COURSES_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main/courses.json';
 const RAW_REPO_URL = 'https://raw.githubusercontent.com/pandeysuryansh921-wq/course-tracker-library/main';
 
 export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModalProps) {
@@ -31,20 +34,57 @@ export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModal
 
   useEffect(() => {
     if (isOpen) {
-      fetchCourses();
+      fetchCourses(false);
     }
   }, [isOpen]);
 
-  const fetchCourses = async () => {
+  const fetchCourses = async (forceRefresh: boolean = false) => {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetch(LIBRARY_JSON_URL);
+
+      // 1. Check cached version if not force refresh
+      const cachedVersion = localStorage.getItem('degreetrack_courses_version');
+      const cachedData = localStorage.getItem('degreetrack_courses_cache');
+
+      if (!forceRefresh && cachedVersion && cachedData) {
+        try {
+          const manifestRes = await fetch(`${MANIFEST_URL}?t=${Date.now()}`);
+          if (manifestRes.ok) {
+            const manifest = await manifestRes.json();
+            if (manifest.libraryVersion === Number(cachedVersion)) {
+              setCourses(JSON.parse(cachedData));
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch {
+          // Ignore manifest fetch error and proceed to fresh download
+        }
+      }
+
+      // 2. Fetch fresh catalog from community/courses/index.json
+      let res = await fetch(`${COURSES_INDEX_URL}?t=${Date.now()}`);
+      if (!res.ok) {
+        res = await fetch(`${FALLBACK_COURSES_URL}?t=${Date.now()}`);
+      }
+
       if (!res.ok) throw new Error('Failed to fetch community courses');
       const data = await res.json();
       setCourses(data);
+
+      // Update cache
+      localStorage.setItem('degreetrack_courses_cache', JSON.stringify(data));
+      try {
+        const mRes = await fetch(`${MANIFEST_URL}?t=${Date.now()}`);
+        if (mRes.ok) {
+          const m = await mRes.json();
+          localStorage.setItem('degreetrack_courses_version', String(m.libraryVersion || 1));
+        }
+      } catch {}
+
     } catch (err: any) {
-      setError("Could not load library. Please try again later.");
+      setError("Could not load library. Please check your internet connection.");
     } finally {
       setIsLoading(false);
     }
@@ -56,12 +96,14 @@ export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModal
       setError(null);
       setSuccess(null);
       
-      const fileUrl = `${RAW_REPO_URL}/${course.filename}`;
+      const relPath = course.file ? `community/${course.file}` : course.filename;
+      const fileUrl = `${RAW_REPO_URL}/${relPath}`;
       const res = await fetch(fileUrl);
-      if (!res.ok) throw new Error(`Failed to download ${course.filename}`);
+      if (!res.ok) throw new Error(`Failed to download ${course.title}`);
       
       const blob = await res.blob();
-      const file = new File([blob], course.filename, { type: 'application/zip' });
+      const fileName = course.file ? course.file.split('/').pop() || 'course.json' : course.filename || 'course.json';
+      const file = new File([blob], fileName, { type: 'application/json' });
       
       await importCourseFromZip(file);
       await useCurriculumStore.getState().initialize(true);
@@ -78,9 +120,20 @@ export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModal
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Community Library">
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-[var(--text-muted)]">
-          Browse and download courses created by the Course Tracker community. Click "Download" to instantly import a course into your app.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-[var(--text-muted)]">
+            Browse and download courses created by the Course Tracker community. Click "Download" to instantly import a course into your app.
+          </p>
+          <button
+            onClick={() => fetchCourses(true)}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium shrink-0 border border-slate-200 dark:border-slate-700 transition-colors"
+            title="Refresh community course catalog"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
 
         {error && (
           <div className="flex items-center gap-2 p-3 text-sm text-red-500 bg-red-500/10 rounded-lg border border-red-500/20">
