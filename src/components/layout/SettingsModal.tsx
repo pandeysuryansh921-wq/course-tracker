@@ -5,9 +5,15 @@ import { Modal } from '@/components/ui/Modal';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { useUserStore } from '@/stores/useUserStore';
+import { useAIStore } from '@/stores/useAIStore';
+import { SUPPORTED_MODELS, AIProvider } from '@/types/ai';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
 import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
-import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network, Users, ShieldCheck, Send } from 'lucide-react';
+import { 
+  Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, 
+  Network, Users, ShieldCheck, Send, Sparkles, Key, CheckCircle2, ExternalLink, 
+  Cpu, Globe, Search, Lock, Trash2, Eye, EyeOff, Check
+} from 'lucide-react';
 import { CommunityLibraryModal } from './CommunityLibraryModal';
 import { sanitizeCourseCurriculum, sanitizeEntireDegree, publishToCommunityOneTap } from '@/lib/community';
 
@@ -20,7 +26,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const courses = useCurriculumStore((state) => state.courses);
   const { theme, toggleTheme } = useThemeStore();
   const { profile, setEcosystemMode, updateProfileSettings } = useUserStore();
+  const {
+    keys: aiKeys,
+    activeProvider,
+    activeModel,
+    setKey: setAIKey,
+    removeKey: removeAIKey,
+    setActiveProvider,
+    setActiveModel,
+    testConnection: testAIConnection,
+    connectionStatuses,
+    clearAllKeys
+  } = useAIStore();
   
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
   const [isCommunityPublishing, setIsCommunityPublishing] = useState(false);
@@ -337,6 +356,329 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <Cloud size={18} /> Connect Google Drive
             </button>
           )}
+        </div>
+
+        {/* AI & API Keys (BYOK) Section */}
+        <div className="flex flex-col gap-4 pb-6 border-b border-border">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-500" />
+              AI & API Keys (BYOK)
+            </h3>
+            <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+              <Lock size={11} /> 100% Local Storage
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Bring your own API keys for the <strong>AI Course Curation Engine</strong> and real-time educational discovery. Keys remain strictly in your browser and are excluded from backups and community exports.
+          </p>
+
+          {/* Active Model Selection */}
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Default Active AI Model
+              </span>
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                Used for Course Curation
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 mb-1">Provider</label>
+                <select
+                  value={activeProvider}
+                  onChange={(e) => setActiveProvider(e.target.value as AIProvider)}
+                  className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
+                >
+                  <option value="gemini">Google Gemini (Recommended)</option>
+                  <option value="groq">Groq (Ultra-Fast LPUs)</option>
+                  <option value="openai">OpenAI (GPT-4o)</option>
+                  <option value="anthropic">Anthropic (Claude 3.7 / 3.5)</option>
+                  <option value="openrouter">OpenRouter (Unified Access)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 mb-1">Model</label>
+                <select
+                  value={activeModel}
+                  onChange={(e) => setActiveModel(e.target.value)}
+                  className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
+                >
+                  {SUPPORTED_MODELS[activeProvider]?.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} {m.isRecommended ? '★ Recommended' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Providers Keys */}
+          <div className="space-y-3">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+              AI Provider Keys
+            </span>
+
+            {[
+              { 
+                id: 'gemini', 
+                name: 'Google Gemini API Key', 
+                badge: 'Recommended', 
+                link: 'https://aistudio.google.com/app/apikey', 
+                linkLabel: 'Get free key (AI Studio)',
+                placeholder: 'AIzaSy...' 
+              },
+              { 
+                id: 'groq', 
+                name: 'Groq API Key', 
+                badge: 'Fastest', 
+                link: 'https://console.groq.com/keys', 
+                linkLabel: 'console.groq.com',
+                placeholder: 'gsk_...' 
+              },
+              { 
+                id: 'openai', 
+                name: 'OpenAI API Key', 
+                link: 'https://platform.openai.com/api-keys', 
+                linkLabel: 'platform.openai.com',
+                placeholder: 'sk-proj-...' 
+              },
+              { 
+                id: 'anthropic', 
+                name: 'Anthropic API Key', 
+                link: 'https://console.anthropic.com/settings/keys', 
+                linkLabel: 'console.anthropic.com',
+                placeholder: 'sk-ant-...' 
+              },
+              { 
+                id: 'openrouter', 
+                name: 'OpenRouter API Key', 
+                link: 'https://openrouter.ai/keys', 
+                linkLabel: 'openrouter.ai',
+                placeholder: 'sk-or-...' 
+              }
+            ].map((p) => {
+              const status = connectionStatuses[p.id];
+              const isMasked = !showKeys[p.id];
+              const currentVal = (aiKeys as any)[p.id] || '';
+
+              return (
+                <div key={p.id} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        {p.name}
+                      </span>
+                      {p.badge && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                          {p.badge}
+                        </span>
+                      )}
+                    </div>
+                    {p.link && (
+                      <a
+                        href={p.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-blue-500 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        {p.linkLabel} <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={isMasked ? 'password' : 'text'}
+                        value={currentVal}
+                        onChange={(e) => setAIKey(p.id, e.target.value)}
+                        placeholder={p.placeholder}
+                        className="w-full text-xs py-1.5 pl-2.5 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKeys((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
+                        className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                        title={isMasked ? 'Show key' : 'Hide key'}
+                      >
+                        {isMasked ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!currentVal.trim() || status?.status === 'testing'}
+                      onClick={() => testAIConnection(p.id as any)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-40 transition-colors shrink-0 flex items-center gap-1"
+                    >
+                      {status?.status === 'testing' ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" /> Testing
+                        </>
+                      ) : (
+                        'Test'
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status indicator */}
+                  {status && status.status !== 'idle' && (
+                    <div className="flex items-center gap-1.5 text-[11px] pt-0.5">
+                      {status.status === 'connected' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Connected ({status.latencyMs}ms)
+                        </span>
+                      )}
+                      {status.status === 'error' && (
+                        <span className="text-red-500 font-medium flex items-center gap-1">
+                          <AlertCircle size={12} /> {status.errorMsg || 'Connection failed'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Search & Tool Discovery Keys */}
+          <div className="space-y-3 pt-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+              Search & Discovery Keys (Optional)
+            </span>
+
+            {[
+              {
+                id: 'tavily',
+                name: 'Tavily Search API Key',
+                desc: 'Real-time web verification for latest documentation & tutorials',
+                link: 'https://tavily.com',
+                linkLabel: 'tavily.com',
+                placeholder: 'tvly-...'
+              },
+              {
+                id: 'youtube',
+                name: 'YouTube Data API v3 Key',
+                desc: 'Discovers verified educational videos and playlists',
+                link: 'https://console.cloud.google.com/apis/credentials',
+                linkLabel: 'Google Cloud Console',
+                placeholder: 'AIzaSy...'
+              },
+              {
+                id: 'github',
+                name: 'GitHub Personal Access Token',
+                desc: 'Discovers open-source repositories and hands-on coding exercises',
+                link: 'https://github.com/settings/tokens',
+                linkLabel: 'github.com/settings/tokens',
+                placeholder: 'ghp_... or github_pat_...'
+              }
+            ].map((tool) => {
+              const status = connectionStatuses[tool.id];
+              const isMasked = !showKeys[tool.id];
+              const currentVal = (aiKeys as any)[tool.id] || '';
+
+              return (
+                <div key={tool.id} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block">
+                        {tool.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {tool.desc}
+                      </span>
+                    </div>
+                    {tool.link && (
+                      <a
+                        href={tool.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-blue-500 hover:underline inline-flex items-center gap-0.5 shrink-0 ml-2"
+                      >
+                        {tool.linkLabel} <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={isMasked ? 'password' : 'text'}
+                        value={currentVal}
+                        onChange={(e) => setAIKey(tool.id, e.target.value)}
+                        placeholder={tool.placeholder}
+                        className="w-full text-xs py-1.5 pl-2.5 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKeys((prev) => ({ ...prev, [tool.id]: !prev[tool.id] }))}
+                        className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                        title={isMasked ? 'Show key' : 'Hide key'}
+                      >
+                        {isMasked ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!currentVal.trim() || status?.status === 'testing'}
+                      onClick={() => testAIConnection(tool.id as any)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-40 transition-colors shrink-0 flex items-center gap-1"
+                    >
+                      {status?.status === 'testing' ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" /> Testing
+                        </>
+                      ) : (
+                        'Test'
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status indicator */}
+                  {status && status.status !== 'idle' && (
+                    <div className="flex items-center gap-1.5 text-[11px] pt-0.5">
+                      {status.status === 'connected' && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Connected ({status.latencyMs}ms)
+                        </span>
+                      )}
+                      {status.status === 'error' && (
+                        <span className="text-red-500 font-medium flex items-center gap-1">
+                          <AlertCircle size={12} /> {status.errorMsg || 'Connection failed'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-[11px] text-slate-400">
+              Keys are stored in browser localStorage only.
+            </span>
+            {Object.keys(aiKeys).length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Are you sure you want to remove all saved AI and search keys from this device?')) {
+                    clearAllKeys();
+                  }
+                }}
+                className="text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+              >
+                <Trash2 size={12} /> Clear All Keys
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Ecosystem Toggle */}

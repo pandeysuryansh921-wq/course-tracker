@@ -10,9 +10,10 @@ interface ModalProps {
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  maxWidth?: string;
 }
 
-export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, footer, maxWidth = 'max-w-lg' }: ModalProps) {
   const [mounted, setMounted] = useState(false);
 
   // Ref to always have the latest onClose without re-running effects
@@ -54,7 +55,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         onClick={onClose}
       />
 
-      <div className="relative z-10 w-full max-w-lg bg-card border border-border shadow-2xl rounded-xl p-6 mx-4 animate-slide-up flex flex-col">
+      <div className={`relative z-10 w-full ${maxWidth} bg-card border border-border shadow-2xl rounded-xl p-6 mx-4 animate-slide-up flex flex-col`}>
         <div className="flex items-center justify-between mb-4">
           {title && (
             <h2 className="text-xl font-semibold text-[var(--text-main)]">

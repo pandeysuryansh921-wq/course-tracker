@@ -8,14 +8,15 @@ import { Button } from '@/components/ui/Button';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { generateId, COURSE_COLORS, COURSE_ICONS } from '@/lib/utils';
 import * as Icons from 'lucide-react';
-import { Trash2, Plus } from 'lucide-react';
+import { Trash2, Plus, Sparkles, ArrowRight } from 'lucide-react';
 
 interface AddCourseModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSwitchToCurate?: () => void;
 }
 
-export default function AddCourseModal({ isOpen, onClose }: AddCourseModalProps) {
+export default function AddCourseModal({ isOpen, onClose, onSwitchToCurate }: AddCourseModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState(COURSE_COLORS[0]);
@@ -56,6 +57,30 @@ export default function AddCourseModal({ isOpen, onClose }: AddCourseModalProps)
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add New Course">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {onSwitchToCurate && (
+          <div 
+            onClick={onSwitchToCurate}
+            className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/60 rounded-xl flex items-center justify-between cursor-pointer hover:border-blue-400 transition-all group"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Want an entire syllabus generated automatically?
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Use the AI Course Curator with topics & resources
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Curate with AI <ArrowRight className="w-3 h-3" />
+            </span>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Course Name</label>
           <Input 
