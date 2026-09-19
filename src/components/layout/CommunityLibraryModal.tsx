@@ -173,12 +173,12 @@ export function CommunityLibraryModal({ isOpen, onClose }: CommunityLibraryModal
                   <button
                     onClick={() => handleDownload(course)}
                     disabled={downloadingId !== null}
-                    className="flex items-center justify-center gap-2 px-4 py-2 w-full sm:w-auto bg-[var(--text-main)] text-[var(--bg-main)] rounded-lg font-medium transition-transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 w-full sm:w-auto bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
                   >
                     {downloadingId === course.id ? (
-                      <><Loader2 size={18} className="animate-spin" /> Downloading...</>
+                      <><Loader2 size={18} className="animate-spin" /> Importing...</>
                     ) : (
-                      <><Download size={18} /> Download</>
+                      <><Download size={18} /> Import Degree</>
                     )}
                   </button>
                 </div>

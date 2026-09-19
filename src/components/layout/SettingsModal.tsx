@@ -9,7 +9,7 @@ import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
 import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
 import { Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, Network, Users, ShieldCheck, Send } from 'lucide-react';
 import { CommunityLibraryModal } from './CommunityLibraryModal';
-import { sanitizeCourseCurriculum, publishToCommunityOneTap } from '@/lib/community';
+import { sanitizeCourseCurriculum, sanitizeEntireDegree, publishToCommunityOneTap } from '@/lib/community';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -24,6 +24,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
   const [isCommunityPublishing, setIsCommunityPublishing] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string; url?: string } | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -32,6 +33,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [isDriveSyncing, setIsDriveSyncing] = useState(false);
   const [driveStatus, setDriveStatus] = useState<string>('');
   const [driveUser, setDriveUser] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (courses.length > 0 && !selectedCourseId) {
+      setSelectedCourseId(courses[0].id);
+    }
+  }, [courses, selectedCourseId]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -98,17 +105,36 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   const handleOneTapPublishCourse = async () => {
-    if (!selectedCourseId) return;
+    const courseIdToPublish = selectedCourseId || (courses.length > 0 ? courses[0].id : '');
+    if (!courseIdToPublish) return;
     try {
       setIsCommunityPublishing(true);
       setError(null);
-      const course = courses.find(c => c.id === selectedCourseId);
-      const sanitized = await sanitizeCourseCurriculum(selectedCourseId);
-      const res = await publishToCommunityOneTap(sanitized, course?.name || 'Course Curriculum');
-      setSuccess(res.message);
-      setTimeout(() => setSuccess(null), 5000);
+      setExportFeedback(null);
+
+      if (courseIdToPublish === 'all') {
+        const sanitizedCourses = await sanitizeEntireDegree();
+        const results: any[] = [];
+        for (const item of sanitizedCourses) {
+          const res = await publishToCommunityOneTap(item, item.course.title);
+          results.push(res);
+        }
+        const ids = results.map(r => r.submissionId).filter(Boolean);
+        const msg = `✓ Successfully submitted all ${results.length} degree courses to community review (${ids.join(', ')})!`;
+        setSuccess(msg);
+        setExportFeedback({ type: 'success', message: msg, url: results[0]?.url });
+      } else {
+        const course = courses.find(c => c.id === courseIdToPublish);
+        const sanitized = await sanitizeCourseCurriculum(courseIdToPublish);
+        const res = await publishToCommunityOneTap(sanitized, course?.name || 'Course Curriculum');
+        setSuccess(res.message);
+        setExportFeedback({ type: 'success', message: res.message, url: res.url });
+      }
+      setTimeout(() => setExportFeedback(null), 10000);
     } catch (err: any) {
-      setError(err.message || "Failed to publish course to community");
+      const msg = err.message || "Failed to publish course to community";
+      setError(msg);
+      setExportFeedback({ type: 'error', message: msg });
     } finally {
       setIsCommunityPublishing(false);
     }
@@ -185,43 +211,70 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         {/* Export Section */}
         <div className="flex flex-col gap-3 pb-6 border-b border-border">
-          <h3 className="font-medium text-[var(--text-main)]">Export Course</h3>
-          <p className="text-sm text-[var(--text-muted)]">Download a course to share it. Personal progress and scores will be removed so it's fresh for others.</p>
+          <h3 className="font-medium text-[var(--text-main)]">Export Course / Degree</h3>
+          <p className="text-sm text-[var(--text-muted)]">Export your curriculum to the Community Library or download a package. Personal study progress and scores are automatically removed.</p>
           
           {courses.length === 0 ? (
             <p className="text-sm italic text-slate-500">You don't have any courses to export yet.</p>
           ) : (
-            <div className="flex flex-col sm:flex-row gap-3 mt-2">
-              <select
-                value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
-                className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white font-medium"
-              >
-                <option value="">Select a course...</option>
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleOneTapPublishCourse}
-                  disabled={!selectedCourseId || isCommunityPublishing}
-                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white rounded-lg transition-transform active:scale-95 disabled:opacity-50 font-medium whitespace-nowrap text-sm shadow-sm"
-                  title="1-Tap export sanitized course to community"
+            <div className="space-y-3 mt-2">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select
+                  value={selectedCourseId || (courses.length > 0 ? courses[0].id : '')}
+                  onChange={(e) => setSelectedCourseId(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white font-medium"
                 >
-                  {isCommunityPublishing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  <span>{isCommunityPublishing ? 'Publishing...' : '1-Tap to Community'}</span>
-                </button>
-                <button
-                  onClick={handleExport}
-                  disabled={!selectedCourseId || isExporting}
-                  className="flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg transition-transform active:scale-95 disabled:opacity-50 font-medium whitespace-nowrap text-sm"
-                  title="Download .zip course package"
-                >
-                  <Download size={16} />
-                  <span>{isExporting ? 'Exporting...' : 'Download .zip'}</span>
-                </button>
+                  {courses.length > 1 && (
+                    <option value="all">★ Entire Degree Track ({courses.length} Courses)</option>
+                  )}
+                  {courses.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOneTapPublishCourse}
+                    disabled={isCommunityPublishing}
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white rounded-lg transition-transform active:scale-95 disabled:opacity-50 font-medium whitespace-nowrap text-sm shadow-sm"
+                    title="1-Tap export sanitized course to community"
+                  >
+                    {isCommunityPublishing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    <span>{isCommunityPublishing ? 'Publishing...' : '1-Tap to Community'}</span>
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    disabled={!selectedCourseId || selectedCourseId === 'all' || isExporting}
+                    className="flex items-center justify-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg transition-transform active:scale-95 disabled:opacity-50 font-medium whitespace-nowrap text-sm"
+                    title="Download .zip course package"
+                  >
+                    <Download size={16} />
+                    <span>{isExporting ? 'Exporting...' : 'Download .zip'}</span>
+                  </button>
+                </div>
               </div>
+
+              {exportFeedback && (
+                <div className={`p-3 rounded-lg text-xs font-medium flex items-center justify-between gap-2 transition-all ${
+                  exportFeedback.type === 'success' 
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
+                    : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {exportFeedback.type === 'success' ? <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />}
+                    <span>{exportFeedback.message}</span>
+                  </div>
+                  {exportFeedback.url && (
+                    <a
+                      href={exportFeedback.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-semibold hover:opacity-80 shrink-0"
+                    >
+                      View on GitHub →
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

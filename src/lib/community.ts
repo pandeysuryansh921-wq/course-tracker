@@ -1,5 +1,6 @@
 import { db } from './db';
 import { Resource, ResourceMapping, Course, Module, Topic } from '@/types/curriculum';
+import { useCurriculumStore } from '@/stores/useCurriculumStore';
 
 export interface CommunityResourcePayload {
   version: 'degreetrack.community.v1';
@@ -208,41 +209,75 @@ export async function generateCommunityResourceManifest(): Promise<CommunityMani
  * Sanitizes a course curriculum for community sharing (removes all personal progress).
  */
 export async function sanitizeCourseCurriculum(courseId: string): Promise<SanitizedCurriculumPayload> {
-  const course = await db.courses.get(courseId);
-  if (!course) throw new Error('Course not found');
+  const store = useCurriculumStore.getState();
+  const course = store.courses.find(c => c.id === courseId) || await db.courses.get(courseId);
+  if (!course) throw new Error(`Course not found (ID: ${courseId})`);
 
-  const modules = await db.modules.where('courseId').equals(courseId).toArray();
-  const moduleIds = modules.map(m => m.id);
+  let modules = store.modules.filter(m => m.courseId === courseId);
+  if (modules.length === 0) {
+    modules = await db.modules.where('courseId').equals(courseId).toArray();
+  }
+  const moduleIds = new Set(modules.map(m => m.id));
 
-  const topicTemplates = await db.topicTemplates.where('courseId').equals(courseId).toArray();
-  const topicIds = topicTemplates.map(t => t.id);
+  // Find topics by courseId or by matching moduleIds, checking store, topicTemplates, and legacy topics table
+  let topics = store.topics.filter(t => t.courseId === courseId || (t.moduleId && moduleIds.has(t.moduleId)));
+  if (topics.length === 0) {
+    const templates = await db.topicTemplates.toArray().catch(() => []) || [];
+    topics = templates.filter((t: any) => t.courseId === courseId || (t.moduleId && moduleIds.has(t.moduleId))) as any;
+    if (topics.length === 0) {
+      const legacyTopics = await (db as any).topics?.toArray().catch(() => []) || [];
+      topics = legacyTopics.filter((t: any) => t.courseId === courseId || (t.moduleId && moduleIds.has(t.moduleId)));
+    }
+  }
+  const topicIds = new Set(topics.map(t => t.id));
 
-  const selections = await db.userResourceSelections.where('courseId').equals(courseId).toArray();
-  const resourceTemplates = await db.resourceTemplates.toArray();
+  // Find resources belonging to these topics
+  const storeResources = store.resources.filter(r => r.topicId && topicIds.has(r.topicId));
+  const resourceTemplates = await db.resourceTemplates.toArray().catch(() => []) || [];
+  const userSelections = await db.userResourceSelections.toArray().catch(() => []) || [];
+  const legacyResources = await (db as any).resources?.toArray().catch(() => []) || [];
 
-  const sanitizedTopics = topicTemplates.map(t => {
-    const topicSelections = selections.filter(s => s.topicId === t.id);
-    const resources = topicSelections.map(s => {
-      const template = resourceTemplates.find(rt => rt.id === s.resourceId);
-      return {
-        title: template?.title || 'Resource',
-        url: template?.canonicalUrl || '',
-        type: template?.type || 'DOCUMENTATION',
-        role: s.role
-      };
-    });
+  const sanitizedTopics = topics.map(t => {
+    const fromStore = storeResources.filter(r => r.topicId === t.id);
+    const fromSelections = userSelections
+      .filter(s => s.topicId === t.id)
+      .map(s => {
+        const tmpl = resourceTemplates.find(rt => rt.id === s.resourceId);
+        return tmpl ? { ...tmpl, role: s.role, url: tmpl.canonicalUrl } : null;
+      })
+      .filter(Boolean);
+    const fromLegacy = legacyResources.filter((r: any) => r.topicId === t.id);
+
+    const seenUrls = new Set<string>();
+    const mergedResources: any[] = [];
+
+    for (const r of [...fromStore, ...fromSelections, ...fromLegacy]) {
+      const rawUrl = (r as any).canonicalUrl || (r as any).url;
+      if (!rawUrl) continue;
+      const cleanUrl = rawUrl.trim();
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) continue;
+      if (seenUrls.has(cleanUrl.toLowerCase())) continue;
+      seenUrls.add(cleanUrl.toLowerCase());
+
+      mergedResources.push({
+        title: (r as any).title || 'Educational Resource',
+        url: cleanUrl,
+        type: ((r as any).type?.toLowerCase() || 'article'),
+        role: (r as any).scopeInstructions || (r as any).role || 'PRIMARY'
+      });
+    }
 
     return {
       id: t.id,
       moduleId: t.moduleId,
-      title: t.name,
-      description: t.description,
-      prerequisites: t.prerequisites,
-      learningOutcomes: t.learningOutcomes,
-      estimatedHours: t.estimatedHours,
-      difficulty: t.difficulty,
-      order: t.order,
-      resources
+      title: t.name || (t as any).title || 'Topic',
+      description: t.description || '',
+      prerequisites: Array.isArray(t.prerequisites) ? t.prerequisites : (t.prerequisites ? [t.prerequisites] : []),
+      learningOutcomes: Array.isArray(t.learningOutcomes) ? t.learningOutcomes : (t.learningOutcomes ? [t.learningOutcomes] : []),
+      estimatedHours: typeof t.estimatedHours === 'number' ? t.estimatedHours : 2,
+      difficulty: t.difficulty || 'intermediate',
+      order: typeof t.order === 'number' ? t.order : 0,
+      resources: mergedResources
     };
   });
 
@@ -250,22 +285,37 @@ export async function sanitizeCourseCurriculum(courseId: string): Promise<Saniti
     version: 'degreetrack.curriculum.v1',
     exportedAt: new Date().toISOString(),
     course: {
-      title: course.name,
-      description: course.description,
-      color: course.color,
-      icon: course.icon,
+      title: course.name || (course as any).title || 'Curriculum',
+      description: course.description || 'Community course curriculum.',
+      color: course.color || '#3B82F6',
+      icon: course.icon || 'Book',
     },
     modules: modules.map(m => ({
       id: m.id,
-      title: m.name,
-      description: m.description,
-      order: m.order,
+      title: m.name || (m as any).title || 'Module',
+      description: m.description || '',
+      order: typeof m.order === 'number' ? m.order : 0,
     })),
     topics: sanitizedTopics
   };
 
   verifySanitization(payload);
   return payload;
+}
+
+/**
+ * Sanitizes all courses in the active curriculum as an entire degree collection.
+ */
+export async function sanitizeEntireDegree(): Promise<SanitizedCurriculumPayload[]> {
+  const store = useCurriculumStore.getState();
+  const allCourses = store.courses.length > 0 ? store.courses : await db.courses.toArray();
+  if (allCourses.length === 0) throw new Error('No courses found to export');
+
+  const sanitized = await Promise.all(
+    allCourses.map(c => sanitizeCourseCurriculum(c.id))
+  );
+
+  return sanitized;
 }
 
 /**
