@@ -1,6 +1,8 @@
 import { db } from './db';
 import { Resource, ResourceMapping, Course, Module, Topic } from '@/types/curriculum';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
+import { useAIStore } from '@/stores/useAIStore';
+import { useUserStore } from '@/stores/useUserStore';
 
 export interface CommunityResourcePayload {
   version: 'degreetrack.community.v1';
@@ -346,11 +348,81 @@ export interface OneTapPublishResult {
 export const COMMUNITY_REPO = 'pandeysuryansh921-wq/course-tracker-library';
 
 /**
+ * Direct GitHub submission for Android / Static exports where Next.js API routes are unavailable.
+ */
+async function submitDirectlyToGitHub(
+  type: 'course' | 'resource' | 'batch',
+  payload: any,
+  title: string,
+  token: string,
+  repo: string
+): Promise<OneTapPublishResult> {
+  let issueTitle = `[RESOURCE SUBMISSION] ${title}`;
+  if (type === 'course') {
+    const courseTitle = payload.course?.title?.trim() || payload.course?.name?.trim() || payload.title?.trim() || title;
+    issueTitle = `[COURSE SUBMISSION] ${courseTitle}`;
+  } else if (type === 'batch') {
+    const count = payload.resources?.length || payload.totalResources || 0;
+    issueTitle = `[RESOURCE BATCH] ${count} resources`;
+  }
+
+  const machineJson = JSON.stringify({
+    schemaVersion: 1,
+    submissionType: type,
+    submittedAt: new Date().toISOString(),
+    payload
+  }, null, 2);
+
+  const issueBody = `### Community Submission: ${title}
+**Submission Type:** \`${type}\`
+**Submitted At:** \`${new Date().toISOString()}\`
+
+\`\`\`json
+${machineJson}
+\`\`\`
+
+> *Verified 100% sanitized by DegreeTrack Privacy Firewall.*`;
+
+  const ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'DegreeTrack-Client'
+    },
+    body: JSON.stringify({
+      title: issueTitle,
+      body: issueBody,
+      labels: ['community-submission']
+    })
+  });
+
+  if (!ghRes.ok) {
+    const errData = await ghRes.json().catch(() => ({}));
+    throw new Error(errData.message || `GitHub returned HTTP ${ghRes.status}`);
+  }
+
+  const ghData = await ghRes.json();
+  const issueNumber = ghData.number;
+  const submissionId = `GH-${issueNumber}`;
+
+  return {
+    success: true,
+    method: 'serverless_api',
+    submissionId,
+    issueNumber,
+    url: ghData.html_url,
+    message: `✓ Submitted for community review (#${submissionId})! Automated verification is in progress.`
+  };
+}
+
+/**
  * 1-Tap Community Export & Publishing:
  * 1. Automatically verifies that payload passes the Client Privacy Firewall.
- * 2. Directly submits to the serverless /api/community/submit endpoint.
+ * 2. Directly submits to the serverless /api/community/submit endpoint or GitHub API.
  * 3. Returns immediate confirmation with submission ID (#GH-xxx).
- * 4. Zero popups, zero clipboard, zero GitHub account required from contributor.
+ * 4. Zero popups, zero clipboard, zero manual GitHub issues needed from contributor.
  */
 export async function publishToCommunityOneTap(
   payload: CommunityResourcePayload | SanitizedCurriculumPayload | CommunityManifestPayload,
@@ -366,6 +438,25 @@ export async function publishToCommunityOneTap(
     type = 'batch';
   }
 
+  const repo = process.env.NEXT_PUBLIC_COMMUNITY_REPO || COMMUNITY_REPO;
+  const directToken = 
+    useAIStore.getState().keys.github || 
+    useUserStore.getState().profile?.communityGithubToken || 
+    process.env.NEXT_PUBLIC_GITHUB_COMMUNITY_TOKEN;
+
+  // On Android/Capacitor native platform, relative /api/ paths hit localhost without a Next.js server.
+  // We can immediately submit directly to GitHub when a token is available.
+  const isCapacitor = typeof window !== 'undefined' && 
+    (Boolean((window as any).Capacitor?.isNativePlatform?.()) || window.location.protocol === 'capacitor:' || window.location.hostname === 'localhost');
+
+  if (isCapacitor && directToken) {
+    try {
+      return await submitDirectlyToGitHub(type, payload, title, directToken, repo);
+    } catch (err: any) {
+      console.warn('[Community OneTap] Direct GitHub submission error:', err);
+    }
+  }
+
   // 2. Call Serverless Community Submission Endpoint
   try {
     const endpoint = process.env.NEXT_PUBLIC_COMMUNITY_API_URL || '/api/community/submit';
@@ -379,27 +470,36 @@ export async function publishToCommunityOneTap(
       })
     });
 
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      throw new Error(data.error || `Server error (${res.status})`);
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        success: true,
+        method: 'serverless_api',
+        submissionId: data.submissionId,
+        issueNumber: data.issueNumber,
+        message: `✓ Submitted for community review (${data.submissionId || 'Pending'})! Automated verification is in progress.`,
+        url: data.issueUrl
+      };
     }
 
-    return {
-      success: true,
-      method: 'serverless_api',
-      submissionId: data.submissionId,
-      issueNumber: data.issueNumber,
-      message: `✓ Submitted for community review (${data.submissionId || 'Pending'})! Automated verification is in progress.`,
-      url: data.issueUrl
-    };
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Server error (${res.status})`);
   } catch (err: any) {
+    // Fallback: If serverless failed (e.g. mobile static export / offline), attempt direct GitHub submission if token exists
+    if (directToken) {
+      try {
+        return await submitDirectlyToGitHub(type, payload, title, directToken, repo);
+      } catch (ghErr: any) {
+        throw new Error(`Failed to submit issue to GitHub: ${ghErr.message}`);
+      }
+    }
+
     // Save local backup file if offline/server unreachable so contributor work is never lost
     const safeFilename = `backup_${title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30)}.json`;
     downloadJsonFile(payload, safeFilename);
 
     throw new Error(
-      `Community submission service error: ${err.message}. A local backup (${safeFilename}) was saved to your device.`
+      `Community submission service error: ${err.message}. A local backup (${safeFilename}) was saved to your device. (You can also add a GitHub Personal Access Token in Settings -> AI & API Keys to submit directly).`
     );
   }
 }

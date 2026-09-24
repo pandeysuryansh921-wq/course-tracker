@@ -23,18 +23,32 @@ export const SUPPORTED_MODELS: Record<AIProvider, AIModelOption[]> = {
       isRecommended: true
     },
     {
-      id: 'gemini-1.5-pro',
-      name: 'Gemini 1.5 Pro',
+      id: 'gemini-2.5-flash',
+      name: 'Gemini 2.5 Flash',
+      provider: 'gemini',
+      description: 'Next-gen reasoning and fast curriculum generation.',
+      contextWindow: '1M tokens'
+    },
+    {
+      id: 'gemini-2.0-flash-lite',
+      name: 'Gemini 2.0 Flash Lite',
+      provider: 'gemini',
+      description: 'Ultra-fast lightweight model for quick outlines.',
+      contextWindow: '1M tokens'
+    },
+    {
+      id: 'gemini-1.5-flash-latest',
+      name: 'Gemini 1.5 Flash (Latest)',
+      provider: 'gemini',
+      description: 'Stable flash model for fast structuring.',
+      contextWindow: '1M tokens'
+    },
+    {
+      id: 'gemini-1.5-pro-latest',
+      name: 'Gemini 1.5 Pro (Latest)',
       provider: 'gemini',
       description: 'Deep reasoning, massive context for highly complex multi-module degrees.',
       contextWindow: '2M tokens'
-    },
-    {
-      id: 'gemini-1.5-flash',
-      name: 'Gemini 1.5 Flash',
-      provider: 'gemini',
-      description: 'Fast and lightweight for quick course outlines.',
-      contextWindow: '1M tokens'
     }
   ],
   groq: [

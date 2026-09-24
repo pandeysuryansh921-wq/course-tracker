@@ -54,7 +54,11 @@ export function extractAndParseJSON<T = any>(rawText: string): T {
  * Calls Google Gemini REST API directly.
  */
 async function callGemini(req: CompletionRequest): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:generateContent?key=${encodeURIComponent(req.apiKey)}`;
+  let modelName = req.model || 'gemini-2.0-flash';
+  if (modelName === 'gemini-1.5-flash' || modelName === 'gemini-1.5-pro') {
+    modelName = 'gemini-2.0-flash';
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(req.apiKey)}`;
 
   const body: any = {
     contents: [
@@ -263,7 +267,10 @@ export async function testConnection(
     const trimmedKey = apiKey.trim();
 
     if (providerOrTool === 'gemini') {
-      const targetModel = model || 'gemini-2.0-flash';
+      let targetModel = model || 'gemini-2.0-flash';
+      if (targetModel === 'gemini-1.5-flash' || targetModel === 'gemini-1.5-pro') {
+        targetModel = 'gemini-2.0-flash';
+      }
       await generateStructuredCompletion({
         provider: 'gemini',
         apiKey: trimmedKey,

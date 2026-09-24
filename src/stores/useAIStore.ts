@@ -134,7 +134,14 @@ export const useAIStore = create<AIStoreState>()(
         keys: state.keys,
         activeProvider: state.activeProvider,
         activeModel: state.activeModel
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          if (state.activeModel === 'gemini-1.5-flash' || state.activeModel === 'gemini-1.5-pro') {
+            state.activeModel = 'gemini-2.0-flash';
+          }
+        }
+      }
     }
   )
 );
