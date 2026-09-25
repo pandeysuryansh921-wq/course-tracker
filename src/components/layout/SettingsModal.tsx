@@ -9,10 +9,12 @@ import { useAIStore } from '@/stores/useAIStore';
 import { SUPPORTED_MODELS, AIProvider } from '@/types/ai';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
 import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
+import { useVideoCacheStore } from '@/stores/useVideoCacheStore';
+import { formatBytes } from '@/lib/drive/cacheManager';
 import { 
   Download, Upload, Moon, Sun, AlertCircle, Cloud, BookOpen, Loader2, LogOut, 
   Network, Users, ShieldCheck, Send, Sparkles, Key, CheckCircle2, ExternalLink, 
-  Cpu, Globe, Search, Lock, Trash2, Eye, EyeOff, Check, X
+  Cpu, Globe, Search, Lock, Trash2, Eye, EyeOff, Check, X, Video
 } from 'lucide-react';
 import { CommunityLibraryModal } from './CommunityLibraryModal';
 import { sanitizeCourseCurriculum, sanitizeEntireDegree, publishToCommunityOneTap } from '@/lib/community';
@@ -30,6 +32,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     keys: aiKeys,
     activeProvider,
     activeModel,
+    recognizedModels,
+    autoDiscoverModels,
     setKey: setAIKey,
     removeKey: removeAIKey,
     setActiveProvider,
@@ -53,6 +57,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [driveStatus, setDriveStatus] = useState<string>('');
   const [driveUser, setDriveUser] = useState<any>(null);
 
+  const videoSettings = useVideoCacheStore((state) => state.settings);
+  const updateVideoSettings = useVideoCacheStore((state) => state.updateSettings);
+  const clearAllVideoCache = useVideoCacheStore((state) => state.clearAllCache);
+  const totalVideoStorage = useVideoCacheStore((state) => state.getTotalStorageBytes());
+
+  const handleClearVideoCache = async () => {
+    if (window.confirm('Delete all offline video files from device? (Original videos on Google Drive will remain 100% safe).')) {
+      await clearAllVideoCache();
+      setSuccess('All offline video files cleared from device.');
+      setTimeout(() => setSuccess(null), 3000);
+    }
+  };
+
   React.useEffect(() => {
     if (courses.length > 0 && !selectedCourseId) {
       setSelectedCourseId(courses[0].id);
@@ -64,8 +81,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       checkLastBackupTime().then(res => {
         if (res && res.user) setDriveUser(res.user);
       }).catch(() => {});
+
+      if (aiKeys.gemini && aiKeys.gemini.trim().length >= 20) {
+        autoDiscoverModels('gemini').catch(() => {});
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, aiKeys.gemini, autoDiscoverModels]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -379,6 +400,67 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
         </div>
 
+        {/* Smart Video Offline Cache Section */}
+        <div className="flex flex-col gap-3 pb-6 border-b border-border">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <Video className="w-4 h-4 text-red-500" />
+              Smart Video Offline Cache
+            </h3>
+            <span className="text-[11px] font-medium text-slate-500">
+              Storage: <strong className="text-slate-800 dark:text-slate-200">{formatBytes(totalVideoStorage)}</strong>
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Automatically pre-downloads upcoming lectures in the background while studying. Watched lectures are automatically removed from your device after a retention period to preserve storage (Google Drive files remain untouched).
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                Background Prefetch Window
+              </label>
+              <select
+                value={videoSettings.prefetchCount}
+                onChange={(e) => updateVideoSettings({ prefetchCount: Number(e.target.value) })}
+                className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
+              >
+                <option value={1}>Download Next 1 Lecture</option>
+                <option value={2}>Download Next 2 Lectures (Recommended)</option>
+                <option value={3}>Download Next 3 Lectures</option>
+                <option value={0}>Disabled (Stream Only)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                Auto-Purge Watched Lectures
+              </label>
+              <select
+                value={videoSettings.retentionDays}
+                onChange={(e) => updateVideoSettings({ retentionDays: Number(e.target.value) })}
+                className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
+              >
+                <option value={1}>Delete after 1 Day</option>
+                <option value={3}>Delete after 3 Days (Recommended)</option>
+                <option value={7}>Delete after 7 Days</option>
+                <option value={0}>Never Auto-Delete</option>
+              </select>
+            </div>
+          </div>
+
+          {totalVideoStorage > 0 && (
+            <button
+              type="button"
+              onClick={handleClearVideoCache}
+              className="py-2 px-3 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-lg border border-red-200 dark:border-red-800 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Trash2 size={13} /> Clear All Offline Video Cache ({formatBytes(totalVideoStorage)})
+            </button>
+          )}
+        </div>
+
         {/* AI & API Keys (BYOK) Section */}
         <div className="flex flex-col gap-4 pb-6 border-b border-border">
           <div className="flex items-center justify-between">
@@ -423,13 +505,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-500 mb-1">Model</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-medium text-slate-500">Model</label>
+                  {activeProvider === 'gemini' && (recognizedModels?.gemini?.length ?? 0) > 0 && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      ✓ Auto-recognized ({recognizedModels.gemini.length})
+                    </span>
+                  )}
+                </div>
                 <select
                   value={activeModel}
                   onChange={(e) => setActiveModel(e.target.value)}
                   className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
                 >
-                  {SUPPORTED_MODELS[activeProvider]?.map((m) => (
+                  {((recognizedModels?.[activeProvider]?.length)
+                    ? recognizedModels[activeProvider]
+                    : (SUPPORTED_MODELS[activeProvider] || [])
+                  ).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} {m.isRecommended ? '★ Recommended' : ''}
                     </option>
@@ -552,8 +644,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   {status && status.status !== 'idle' && (
                     <div className="flex items-center gap-1.5 text-[11px] pt-0.5">
                       {status.status === 'connected' && (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                          <CheckCircle2 size={12} /> Connected ({status.latencyMs}ms)
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 flex-wrap">
+                          <CheckCircle2 size={12} className="shrink-0" /> Connected ({status.latencyMs}ms)
+                          {status.recognizedModel && (
+                            <span className="text-emerald-700 dark:text-emerald-300 font-semibold ml-1">
+                              • Auto-recognized: {status.recognizedModel}
+                            </span>
+                          )}
                         </span>
                       )}
                       {status.status === 'error' && (

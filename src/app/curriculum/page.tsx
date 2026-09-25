@@ -5,13 +5,15 @@ import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import CourseCard from '@/components/curriculum/CourseCard';
 import AddCourseModal from '@/components/curriculum/AddCourseModal';
 import { CurateCourseModal } from '@/components/curriculum/CurateCourseModal';
+import DriveCourseModal from '@/components/curriculum/DriveCourseModal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Plus, Search, BookOpen, Sparkles } from 'lucide-react';
+import { Plus, Search, BookOpen, Sparkles, FolderPlus } from 'lucide-react';
 
 export default function CurriculumPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCurateModalOpen, setIsCurateModalOpen] = useState(false);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const courses = useCurriculumStore(state => state.courses);
@@ -33,7 +35,14 @@ export default function CurriculumPage() {
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">My Curriculum</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your courses, modules, and study topics.</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <Button 
+            onClick={() => setIsDriveModalOpen(true)}
+            variant="secondary"
+            className="border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+          >
+            <FolderPlus className="w-4 h-4 mr-1.5 text-blue-500" /> Drive Course
+          </Button>
           <Button 
             onClick={() => setIsCurateModalOpen(true)}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-500/20"
@@ -115,6 +124,11 @@ export default function CurriculumPage() {
       <CurateCourseModal
         isOpen={isCurateModalOpen}
         onClose={() => setIsCurateModalOpen(false)}
+      />
+
+      <DriveCourseModal
+        isOpen={isDriveModalOpen}
+        onClose={() => setIsDriveModalOpen(false)}
       />
     </div>
   );

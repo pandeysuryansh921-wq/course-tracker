@@ -15,40 +15,33 @@ export interface AIModelOption {
 export const SUPPORTED_MODELS: Record<AIProvider, AIModelOption[]> = {
   gemini: [
     {
-      id: 'gemini-2.0-flash',
-      name: 'Gemini 2.0 Flash',
+      id: 'gemini-2.5-flash',
+      name: 'Gemini 2.5 Flash',
       provider: 'gemini',
-      description: 'Next-gen multimodal model. Ultra-fast, highly accurate JSON formatting.',
+      description: 'Ultra-fast, high-accuracy reasoning and structured course curation.',
       contextWindow: '1M tokens',
       isRecommended: true
     },
     {
-      id: 'gemini-2.5-flash',
-      name: 'Gemini 2.5 Flash',
+      id: 'gemini-3.6-flash',
+      name: 'Gemini 3.6 Flash',
       provider: 'gemini',
-      description: 'Next-gen reasoning and fast curriculum generation.',
+      description: 'Next-generation Gemini Flash with advanced curriculum capabilities.',
       contextWindow: '1M tokens'
     },
     {
-      id: 'gemini-2.0-flash-lite',
-      name: 'Gemini 2.0 Flash Lite',
+      id: 'gemini-3.5-flash',
+      name: 'Gemini 3.5 Flash',
       provider: 'gemini',
-      description: 'Ultra-fast lightweight model for quick outlines.',
+      description: 'High-speed balanced model for rapid outline generation.',
       contextWindow: '1M tokens'
     },
     {
-      id: 'gemini-1.5-flash-latest',
-      name: 'Gemini 1.5 Flash (Latest)',
+      id: 'gemini-3.5-flash-lite',
+      name: 'Gemini 3.5 Flash Lite',
       provider: 'gemini',
-      description: 'Stable flash model for fast structuring.',
+      description: 'Lightweight model with rapid response times for micro-tasks.',
       contextWindow: '1M tokens'
-    },
-    {
-      id: 'gemini-1.5-pro-latest',
-      name: 'Gemini 1.5 Pro (Latest)',
-      provider: 'gemini',
-      description: 'Deep reasoning, massive context for highly complex multi-module degrees.',
-      contextWindow: '2M tokens'
     }
   ],
   groq: [
@@ -146,6 +139,8 @@ export interface ConnectionStatus {
   latencyMs?: number;
   errorMsg?: string;
   checkedAt?: string;
+  recognizedModel?: string;
+  recognizedModels?: AIModelOption[];
 }
 
 export interface CurateCourseRequest {
