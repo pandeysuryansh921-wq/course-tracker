@@ -19,14 +19,7 @@ const initGoogle = async () => {
 const getAccessToken = async () => {
   try {
     await initGoogle();
-    let result;
-    try {
-      result = await GoogleSignIn.signIn();
-    } catch (err: any) {
-      console.warn("First sign-in attempt failed, resetting credential state and retrying...", err);
-      await GoogleSignIn.signOut().catch(() => {});
-      result = await GoogleSignIn.signIn();
-    }
+    const result = await GoogleSignIn.signIn();
     
     if (!result.accessToken) {
       throw new Error("No access token returned from Google Sign-In");
@@ -34,8 +27,34 @@ const getAccessToken = async () => {
     saveUserLocally(result);
     return { token: result.accessToken, user: result };
   } catch (err: any) {
-    console.error("Google SignIn Error:", err);
-    throw new Error(err.message || "Failed to authenticate with Google");
+    if (process.env.NODE_ENV !== 'production' || (typeof window !== 'undefined' && (Boolean((window as any).__DEV__) || localStorage.getItem('degreetrack_debug_auth') === 'true'))) {
+      console.group?.('[GoogleSignIn Debug] Native Authentication Error');
+      console.error('[GoogleSignIn Debug] Message:', err?.message);
+      console.error('[GoogleSignIn Debug] Code:', err?.code);
+      console.error('[GoogleSignIn Debug] Name:', err?.name);
+      console.error('[GoogleSignIn Debug] Stack:', err?.stack);
+      console.error('[GoogleSignIn Debug] Plugin/Native Details:', {
+        code: err?.code,
+        message: err?.message,
+        data: err?.data,
+        errorMessage: err?.errorMessage,
+        cause: err?.cause,
+        raw: err,
+      });
+      console.groupEnd?.();
+    } else {
+      console.error("Google SignIn Error:", err);
+    }
+
+    const errCodePrefix = err?.code ? `[${err.code}] ` : '';
+    const formattedMessage = err?.message
+      ? (err.message.includes(`[${err.code}]`) ? err.message : `${errCodePrefix}${err.message}`)
+      : (errCodePrefix || "Failed to authenticate with Google");
+
+    const errorToThrow = new Error(formattedMessage);
+    (errorToThrow as any).code = err?.code;
+    (errorToThrow as any).originalError = err;
+    throw errorToThrow;
   }
 };
 

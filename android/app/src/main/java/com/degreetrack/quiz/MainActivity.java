@@ -1,4 +1,4 @@
-package com.degreetrack.app;
+package com.degreetrack.quiz;
 
 import com.getcapacitor.BridgeActivity;
 
