@@ -383,7 +383,7 @@ ${machineJson}
 
 > *Verified 100% sanitized by DegreeTrack Privacy Firewall.*`;
 
-  const ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+  let ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -397,6 +397,23 @@ ${machineJson}
       labels: ['community-submission']
     })
   });
+
+  // If failed due to label permissions (non-admin tokens), retry without labels
+  if (!ghRes.ok && (ghRes.status === 403 || ghRes.status === 422)) {
+    ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'DegreeTrack-Client'
+      },
+      body: JSON.stringify({
+        title: issueTitle,
+        body: issueBody
+      })
+    });
+  }
 
   if (!ghRes.ok) {
     const errData = await ghRes.json().catch(() => ({}));
@@ -418,11 +435,65 @@ ${machineJson}
 }
 
 /**
+ * Builds a pre-filled GitHub issue creation URL for zero-token browser submissions.
+ */
+export function buildPreFilledGitHubIssueUrl(
+  type: 'course' | 'resource' | 'batch',
+  payload: any,
+  title: string,
+  repo: string = COMMUNITY_REPO
+): { url: string; fullBody: string; issueTitle: string } {
+  let issueTitle = `[RESOURCE SUBMISSION] ${title}`;
+  if (type === 'course') {
+    const courseTitle = payload.course?.title?.trim() || payload.course?.name?.trim() || payload.title?.trim() || title;
+    issueTitle = `[COURSE SUBMISSION] ${courseTitle}`;
+  } else if (type === 'batch') {
+    const count = payload.resources?.length || payload.totalResources || 0;
+    issueTitle = `[RESOURCE BATCH] ${count} resources`;
+  }
+
+  const machineJson = JSON.stringify({
+    schemaVersion: 1,
+    submissionType: type,
+    submittedAt: new Date().toISOString(),
+    payload
+  }, null, 2);
+
+  const fullBody = `### Community Submission: ${title}
+**Submission Type:** \`${type}\`
+**Submitted At:** \`${new Date().toISOString()}\`
+
+\`\`\`json
+${machineJson}
+\`\`\`
+
+> *Verified 100% sanitized by DegreeTrack Privacy Firewall.*`;
+
+  // Safe character limit for mobile browser query strings (~3500 chars)
+  let bodyForUrl = fullBody;
+  if (encodeURIComponent(fullBody).length > 3500) {
+    bodyForUrl = `### Community Submission: ${title}
+**Submission Type:** \`${type}\`
+**Submitted At:** \`${new Date().toISOString()}\`
+
+*Note: Course payload is large. The complete sanitized JSON has been automatically copied to your device clipboard! Paste it below:*
+
+\`\`\`json
+// Paste JSON here
+\`\`\`
+
+> *Verified 100% sanitized by DegreeTrack Privacy Firewall.*`;
+  }
+
+  const url = `https://github.com/${repo}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(bodyForUrl)}&labels=community-submission`;
+  return { url, fullBody, issueTitle };
+}
+
+/**
  * 1-Tap Community Export & Publishing:
  * 1. Automatically verifies that payload passes the Client Privacy Firewall.
- * 2. Directly submits to the serverless /api/community/submit endpoint or GitHub API.
- * 3. Returns immediate confirmation with submission ID (#GH-xxx).
- * 4. Zero popups, zero clipboard, zero manual GitHub issues needed from contributor.
+ * 2. If a public API endpoint or direct PAT exists, submits directly in the background.
+ * 3. If zero tokens are configured, automatically opens GitHub with pre-filled issue data (zero token required).
  */
 export async function publishToCommunityOneTap(
   payload: CommunityResourcePayload | SanitizedCurriculumPayload | CommunityManifestPayload,
@@ -444,8 +515,7 @@ export async function publishToCommunityOneTap(
     useUserStore.getState().profile?.communityGithubToken || 
     process.env.NEXT_PUBLIC_GITHUB_COMMUNITY_TOKEN;
 
-  // On Android/Capacitor native platform, relative /api/ paths hit localhost without a Next.js server.
-  // We can immediately submit directly to GitHub when a token is available.
+  // On Android/Capacitor native platform, direct GitHub submission if token exists
   const isCapacitor = typeof window !== 'undefined' && 
     (Boolean((window as any).Capacitor?.isNativePlatform?.()) || window.location.protocol === 'capacitor:' || window.location.hostname === 'localhost');
 
@@ -457,49 +527,73 @@ export async function publishToCommunityOneTap(
     }
   }
 
-  // 2. Call Serverless Community Submission Endpoint
-  try {
-    const endpoint = process.env.NEXT_PUBLIC_COMMUNITY_API_URL || '/api/community/submit';
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        schemaVersion: 1,
-        type,
-        payload
-      })
-    });
+  // 2. Call Serverless Community Submission Endpoint (if configured with a remote URL)
+  const endpoint = process.env.NEXT_PUBLIC_COMMUNITY_API_URL || '/api/community/submit';
+  const isLocalApi = endpoint.startsWith('/');
 
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return {
-        success: true,
-        method: 'serverless_api',
-        submissionId: data.submissionId,
-        issueNumber: data.issueNumber,
-        message: `✓ Submitted for community review (${data.submissionId || 'Pending'})! Automated verification is in progress.`,
-        url: data.issueUrl
-      };
-    }
+  // Only hit relative /api/ path if NOT running on standalone native mobile (where Next.js isn't running)
+  if (!isCapacitor || !isLocalApi) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schemaVersion: 1,
+          type,
+          payload
+        })
+      });
 
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `Server error (${res.status})`);
-  } catch (err: any) {
-    // Fallback: If serverless failed (e.g. mobile static export / offline), attempt direct GitHub submission if token exists
-    if (directToken) {
-      try {
-        return await submitDirectlyToGitHub(type, payload, title, directToken, repo);
-      } catch (ghErr: any) {
-        throw new Error(`Failed to submit issue to GitHub: ${ghErr.message}`);
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return {
+          success: true,
+          method: 'serverless_api',
+          submissionId: data.submissionId,
+          issueNumber: data.issueNumber,
+          message: `✓ Submitted for community review (${data.submissionId || 'Pending'})! Automated verification is in progress.`,
+          url: data.issueUrl
+        };
       }
+    } catch (apiErr: any) {
+      console.warn('[Community OneTap] Remote API error:', apiErr);
     }
-
-    // Save local backup file if offline/server unreachable so contributor work is never lost
-    const safeFilename = `backup_${title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30)}.json`;
-    downloadJsonFile(payload, safeFilename);
-
-    throw new Error(
-      `Community submission service error: ${err.message}. A local backup (${safeFilename}) was saved to your device. (You can also add a GitHub Personal Access Token in Settings -> AI & API Keys to submit directly).`
-    );
   }
+
+  // 3. Fallback: If PAT token exists, submit directly via GitHub API
+  if (directToken) {
+    try {
+      return await submitDirectlyToGitHub(type, payload, title, directToken, repo);
+    } catch (ghErr: any) {
+      console.warn('[Community OneTap] Direct token submission failed:', ghErr);
+    }
+  }
+
+  // 4. Zero-Token Solution: Pre-filled browser submission (no token needed from user!)
+  const { url, fullBody } = buildPreFilledGitHubIssueUrl(type, payload, title, repo);
+
+  // Automatically copy full sanitized payload to clipboard
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(fullBody);
+    }
+  } catch (clipErr) {
+    console.warn('[Community OneTap] Clipboard copy error:', clipErr);
+  }
+
+  // Also save a local backup so user work is never lost
+  const safeFilename = `backup_${title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30)}.json`;
+  downloadJsonFile(payload, safeFilename);
+
+  // Open the prefilled GitHub issue URL in browser
+  if (typeof window !== 'undefined') {
+    window.open(url, '_blank');
+  }
+
+  return {
+    success: true,
+    method: 'local_backup',
+    url,
+    message: '✓ Opened GitHub in your browser with course data pre-filled! Just tap "Submit new issue" (zero token required).'
+  };
 }
