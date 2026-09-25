@@ -101,11 +101,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (res && res.user) setDriveUser(res.user);
     } catch (err: any) {
       const rawMsg = err.message || "";
-      if (rawMsg.includes("16") || rawMsg.toLowerCase().includes("reauth")) {
-        setError("Google Drive sign-in failed. Please verify that your Google Account is connected on this device, or use 'From Device (.zip/.json)' to export/import locally.");
-      } else {
-        setError(rawMsg || "Failed to backup to Google Drive.");
-      }
+      setError(`Google Drive sign-in: ${rawMsg || 'Authentication failed'}. (If you just saved scopes in Google Cloud, please wait 3-5 min for Google to sync).`);
     } finally {
       setIsDriveSyncing(false);
       setDriveStatus('');
