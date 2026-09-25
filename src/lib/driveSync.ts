@@ -19,7 +19,14 @@ const initGoogle = async () => {
 const getAccessToken = async () => {
   try {
     await initGoogle();
-    const result = await GoogleSignIn.signIn();
+    let result;
+    try {
+      result = await GoogleSignIn.signIn();
+    } catch (err: any) {
+      console.warn("First sign-in attempt failed, resetting credential state and retrying...", err);
+      await GoogleSignIn.signOut().catch(() => {});
+      result = await GoogleSignIn.signIn();
+    }
     
     if (!result.accessToken) {
       throw new Error("No access token returned from Google Sign-In");
