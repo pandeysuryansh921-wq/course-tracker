@@ -109,6 +109,7 @@ export interface LinkedNode {
 export interface Course {
   id: string;
   uri?: string; // Phase 1: Stable ecosystem URIs
+  driveFolderId?: string; // Canonical Google Drive Folder ID
   name: string;
   description: string;
   color: string;
@@ -131,6 +132,7 @@ export interface Module {
   id: string;
   uri?: string; // Phase 1
   courseId: string;
+  driveFolderId?: string;
   name: string;
   description: string;
   order: number;
@@ -164,7 +166,11 @@ export interface ResourceTemplate {
   id: string; // canonical stable id
   canonicalUrl: string;
   title: string;
-  provider?: string;
+  provider?: string; // 'google-drive' | 'youtube' | 'local' | 'web'
+  driveFileId?: string; // Canonical Google Drive file ID
+  fileSize?: number;
+  mimeType?: string;
+  isMissingSource?: boolean; // For when a Drive file is deleted/unavailable remotely
   author?: string;
   type: ResourceType | string;
   formats?: string[];
@@ -183,7 +189,8 @@ export interface UserResourceSelection {
   id: string;
   resourceId: string;
   courseId: string;
-  topicId?: string;
+  moduleId?: string; // Support module-level resources
+  topicId?: string; // Support topic-level resources (optional if course or module level)
   role?: string;
   status?: 'planned' | 'in-progress' | 'completed';
   favorite?: boolean;
@@ -198,6 +205,7 @@ export interface TopicTemplate {
   uri?: string;
   moduleId: string;
   courseId: string;
+  driveFolderId?: string;
   name: string;
   description?: string;
   objectives?: string[]; 

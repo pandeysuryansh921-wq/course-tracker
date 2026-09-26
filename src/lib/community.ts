@@ -88,7 +88,14 @@ const FORBIDDEN_KEYS = [
   'endedat',
   'studysessions',
   'flashcards',
-  'submissionfile'
+  'submissionfile',
+  'drivefolderid',
+  'drivefileid',
+  'localuri',
+  'accesstoken',
+  'cachedvideos',
+  'videonotes',
+  'ispinnedoffline'
 ];
 
 /**
@@ -258,6 +265,17 @@ export async function sanitizeCourseCurriculum(courseId: string): Promise<Saniti
       if (!rawUrl) continue;
       const cleanUrl = rawUrl.trim();
       if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) continue;
+
+      // Exclude private Drive links and drive-backed resources from public community export
+      if (
+        (r as any).provider === 'google-drive' || 
+        (r as any).driveFileId || 
+        cleanUrl.includes('drive.google.com/file') || 
+        cleanUrl.includes('drive.google.com/drive/folders')
+      ) {
+        continue;
+      }
+
       if (seenUrls.has(cleanUrl.toLowerCase())) continue;
       seenUrls.add(cleanUrl.toLowerCase());
 

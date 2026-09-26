@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "verify:package": "node scripts/verify-package-safety.js",
+    "build": "npm run verify:package && next build",
     "start": "next start",
     "lint": "eslint"
   },

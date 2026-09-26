@@ -12,7 +12,9 @@ import type {
   Flashcard,
   GemLink,
   Practice,
-  Project
+  Project,
+  ResourceTemplate,
+  UserResourceSelection
 } from '@/types/curriculum';
 import { generateId, generateUri } from '@/lib/utils';
 
@@ -65,7 +67,15 @@ interface CurriculumActions {
   deleteAssignment: (topicId: string, assignmentId: string) => Promise<void>;
 
   // Resource actions
-  addResource: (topicId: string, title: string, url: string, type: ResourceType | string, role?: string) => Promise<Resource>;
+  addResource: (
+    topicId: string, 
+    title: string, 
+    url: string, 
+    type: ResourceType | string, 
+    role?: string, 
+    extra?: { provider?: string; driveFileId?: string; fileSize?: number; mimeType?: string; moduleId?: string; courseId?: string }
+  ) => Promise<Resource>;
+  updateResource: (id: string, updates: Partial<ResourceTemplate & UserResourceSelection & { url?: string }>) => Promise<void>;
   deleteResource: (id: string) => Promise<void>;
 
   // Flashcard actions
@@ -380,22 +390,84 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     await get().updateTopic(topicId, { assignments });
   },
 
-  addResource: async (topicId, title, url, type, role) => {
-    const newResource: Resource = {
-      id: generateId(),
-      resourceId: '', // will be set
-      courseId: '', // will be set
-      topicId,
+  addResource: async (topicId, title, url, type, role, extra) => {
+    const resId = extra?.driveFileId ? `res_drive_${extra.driveFileId}` : 'res_' + btoa(url || title).replace(/[^a-zA-Z0-9]/g, "").substring(0, 16);
+    const selectionId = generateId();
+
+    const template: ResourceTemplate = {
+      id: resId,
       canonicalUrl: url,
       title,
-      url,
       type,
+      provider: extra?.provider || 'web',
+      driveFileId: extra?.driveFileId,
+      fileSize: extra?.fileSize,
+      mimeType: extra?.mimeType,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
-    const resId = 'res_' + btoa(url).replace(/[^a-zA-Z0-9]/g, "").substring(0, 16); const template = { id: resId, canonicalUrl: url, title, type, createdAt: new Date(), updatedAt: new Date() }; const selection = { id: newResource.id, resourceId: resId, courseId: "", topicId, status: 'planned' as const, role, createdAt: new Date(), updatedAt: new Date() }; await db.resourceTemplates.put(template); await db.userResourceSelections.put(selection);
+
+    const selection: UserResourceSelection = {
+      id: selectionId,
+      resourceId: resId,
+      courseId: extra?.courseId || "",
+      moduleId: extra?.moduleId,
+      topicId: topicId || undefined,
+      status: 'planned' as const,
+      role,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const newResource: Resource = {
+      ...template,
+      ...selection,
+      id: selectionId,
+      url: template.canonicalUrl,
+      title,
+      type,
+      topicId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await db.resourceTemplates.put(template);
+    await db.userResourceSelections.put(selection);
     set((state) => ({ resources: [...state.resources, newResource] }));
     return newResource;
+  },
+
+  updateResource: async (id, updates) => {
+    const resource = get().resources.find(r => r.id === id);
+    if (!resource) return;
+
+    if (resource.resourceId) {
+      const templateUpdates: Partial<ResourceTemplate> = {
+        title: updates.title,
+        canonicalUrl: updates.canonicalUrl || updates.url,
+        provider: updates.provider,
+        driveFileId: updates.driveFileId,
+        fileSize: updates.fileSize,
+        mimeType: updates.mimeType,
+        isMissingSource: updates.isMissingSource,
+        updatedAt: new Date(),
+      };
+      await db.resourceTemplates.update(resource.resourceId, templateUpdates);
+    }
+
+    const selectionUpdates: Partial<UserResourceSelection> = {
+      role: updates.role,
+      status: updates.status,
+      favorite: updates.favorite,
+      personalNotes: updates.personalNotes,
+      order: updates.order,
+      updatedAt: new Date(),
+    };
+    await db.userResourceSelections.update(id, selectionUpdates);
+
+    set((state) => ({
+      resources: state.resources.map(r => r.id === id ? { ...r, ...updates, updatedAt: new Date() } : r)
+    }));
   },
 
   deleteResource: async (id) => {

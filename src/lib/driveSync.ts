@@ -2,20 +2,65 @@ import { GoogleSignIn } from '@capawesome/capacitor-google-sign-in';
 import { db } from '@/lib/db';
 import { exportDB, importInto } from 'dexie-export-import';
 
+export const GOOGLE_WEB_CLIENT_ID = '551545873819-aej3m8g3jsraald03s0ep86267v80phr.apps.googleusercontent.com';
+export const SCOPE_BACKUP = 'https://www.googleapis.com/auth/drive.appdata';
+export const SCOPE_COURSE_LIBRARY = 'https://www.googleapis.com/auth/drive.readonly';
+
 const BACKUP_FILE_NAME = 'degreetrack_backup.json';
 
-let isInitialized = false;
+let currentInitializedScope: string | null = null;
 
-const initGoogle = async () => {
-  if (isInitialized) return;
+const initGoogleScope = async (scope: string) => {
+  if (currentInitializedScope === scope) return;
   await GoogleSignIn.initialize({
-    clientId: '551545873819-aej3m8g3jsraald03s0ep86267v80phr.apps.googleusercontent.com',
-    scopes: ['https://www.googleapis.com/auth/drive.appdata'],
+    clientId: GOOGLE_WEB_CLIENT_ID,
+    scopes: [scope],
   });
-  isInitialized = true;
+  currentInitializedScope = scope;
 };
 
-// Get a valid access token
+const initGoogle = async () => {
+  await initGoogleScope(SCOPE_BACKUP);
+};
+
+// Common debug logging helper
+const logAuthError = (flow: string, err: any) => {
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    (typeof window !== 'undefined' &&
+      (Boolean((window as any).__DEV__) || localStorage.getItem('degreetrack_debug_auth') === 'true'))
+  ) {
+    console.group?.(`[GoogleSignIn Debug] Native Authentication Error (${flow})`);
+    console.error('[GoogleSignIn Debug] Message:', err?.message);
+    console.error('[GoogleSignIn Debug] Code:', err?.code);
+    console.error('[GoogleSignIn Debug] Name:', err?.name);
+    console.error('[GoogleSignIn Debug] Stack:', err?.stack);
+    console.error('[GoogleSignIn Debug] Plugin/Native Details:', {
+      flow,
+      code: err?.code,
+      message: err?.message,
+      data: err?.data,
+      errorMessage: err?.errorMessage,
+      cause: err?.cause,
+      raw: err,
+    });
+    console.groupEnd?.();
+  } else {
+    console.error(`Google SignIn Error (${flow}):`, err);
+  }
+
+  const errCodePrefix = err?.code ? `[${err.code}] ` : '';
+  const formattedMessage = err?.message
+    ? (err.message.includes(`[${err.code}]`) ? err.message : `${errCodePrefix}${err.message}`)
+    : (errCodePrefix || 'Failed to authenticate with Google');
+
+  const errorToThrow = new Error(formattedMessage);
+  (errorToThrow as any).code = err?.code;
+  (errorToThrow as any).originalError = err;
+  return errorToThrow;
+};
+
+// Get a valid access token for Backup & Sync (drive.appdata)
 const getAccessToken = async () => {
   try {
     await initGoogle();
@@ -27,35 +72,82 @@ const getAccessToken = async () => {
     saveUserLocally(result);
     return { token: result.accessToken, user: result };
   } catch (err: any) {
-    if (process.env.NODE_ENV !== 'production' || (typeof window !== 'undefined' && (Boolean((window as any).__DEV__) || localStorage.getItem('degreetrack_debug_auth') === 'true'))) {
-      console.group?.('[GoogleSignIn Debug] Native Authentication Error');
-      console.error('[GoogleSignIn Debug] Message:', err?.message);
-      console.error('[GoogleSignIn Debug] Code:', err?.code);
-      console.error('[GoogleSignIn Debug] Name:', err?.name);
-      console.error('[GoogleSignIn Debug] Stack:', err?.stack);
-      console.error('[GoogleSignIn Debug] Plugin/Native Details:', {
-        code: err?.code,
-        message: err?.message,
-        data: err?.data,
-        errorMessage: err?.errorMessage,
-        cause: err?.cause,
-        raw: err,
-      });
-      console.groupEnd?.();
-    } else {
-      console.error("Google SignIn Error:", err);
+    throw logAuthError('Backup & Sync', err);
+  }
+};
+
+export const getBackupAccessToken = getAccessToken;
+
+// Get a valid access token for Course Library (drive.readonly)
+export const getCourseLibraryAccessToken = async (forcePrompt = false) => {
+  try {
+    // Check cached token if fresh
+    const cachedToken = getCachedCourseLibraryToken();
+    if (cachedToken && !forcePrompt) {
+      return { token: cachedToken, user: getCourseLibraryUser() };
     }
 
-    const errCodePrefix = err?.code ? `[${err.code}] ` : '';
-    const formattedMessage = err?.message
-      ? (err.message.includes(`[${err.code}]`) ? err.message : `${errCodePrefix}${err.message}`)
-      : (errCodePrefix || "Failed to authenticate with Google");
+    await initGoogleScope(SCOPE_COURSE_LIBRARY);
+    const result = await GoogleSignIn.signIn();
 
-    const errorToThrow = new Error(formattedMessage);
-    (errorToThrow as any).code = err?.code;
-    (errorToThrow as any).originalError = err;
-    throw errorToThrow;
+    if (!result.accessToken) {
+      throw new Error("No access token returned from Google Sign-In for Course Library");
+    }
+
+    saveCourseLibraryUser(result, result.accessToken);
+    return { token: result.accessToken, user: result };
+  } catch (err: any) {
+    throw logAuthError('Course Library', err);
   }
+};
+
+export const getCachedCourseLibraryToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem('courseLibraryToken');
+  const expiry = localStorage.getItem('courseLibraryTokenExpiry');
+  if (token && expiry) {
+    const expiresAt = Number(expiry);
+    // 5 minutes safety buffer
+    if (Date.now() < expiresAt - 300000) {
+      return token;
+    }
+  }
+  return token || null;
+};
+
+export const getCourseLibraryUser = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('courseLibraryUser');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveCourseLibraryUser = (user: any, token?: string) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(
+    'courseLibraryUser',
+    JSON.stringify({
+      name: user.displayName || user.name || 'Google User',
+      email: user.email,
+      imageUrl: user.imageUrl,
+      connectedAt: new Date().toISOString(),
+    })
+  );
+  if (token) {
+    localStorage.setItem('courseLibraryToken', token);
+    // Typical Google access token lasts 3600 seconds
+    localStorage.setItem('courseLibraryTokenExpiry', String(Date.now() + 3600 * 1000));
+  }
+};
+
+export const disconnectCourseLibrary = async () => {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('courseLibraryUser');
+  localStorage.removeItem('courseLibraryToken');
+  localStorage.removeItem('courseLibraryTokenExpiry');
 };
 
 // Check if a backup exists in appDataFolder

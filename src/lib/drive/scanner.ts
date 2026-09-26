@@ -1,4 +1,12 @@
-import { DriveFileItem, DetectedLecture, DetectedModule, DriveScanResult } from '@/types/video';
+import { 
+  DriveFileItem, 
+  DetectedLecture, 
+  DetectedModule, 
+  DetectedTopic, 
+  DetectedResource, 
+  DetectedResourceType, 
+  DriveScanResult 
+} from '@/types/video';
 import { generateStructuredCompletion } from '@/lib/ai/client';
 
 /**
@@ -20,7 +28,7 @@ export function extractFolderId(input: string): string | null {
     return queryMatch[1];
   }
 
-  // 3. Raw alphanumeric ID: typically 25 to 50 alphanumeric characters
+  // 3. Raw alphanumeric ID: typically 20 to 55 alphanumeric characters
   if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) {
     return trimmed;
   }
@@ -30,31 +38,31 @@ export function extractFolderId(input: string): string | null {
 
 /**
  * Natural Alphanumeric Comparison for sorting filenames like humans expect:
- * "Lecture 1", "Lecture 2", "Lecture 10" (instead of 1, 10, 2).
+ * "01 Intro", "02 Bones", "10 Muscles" (numerical ascending).
  */
 export function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
 /**
- * Extracts a sequential number from a video filename (e.g. "01_Intro", "Lecture 04", "Part 2").
+ * Extracts a sequential number from a video or topic filename.
  */
 export function extractSequenceNumber(filename: string): number {
   const clean = filename.toLowerCase();
 
-  // Pattern A: Leading numbers like "01_...", "01 - ...", "01. ..."
+  // Leading numbers like "01_...", "01 - ...", "01. ..."
   const leadingMatch = clean.match(/^0*(\d+)[_.\-\s]/);
   if (leadingMatch) return parseInt(leadingMatch[1], 10);
 
-  // Pattern B: Keyword followed by number "lecture 03", "lec 3", "class 3", "session 3", "week 2"
-  const keywordMatch = clean.match(/(?:lec(?:ture)?|class|session|part|module|week|w|p|c)[\s._\-#]*(\d+)/i);
+  // Keyword followed by number "lecture 03", "lec 3", "class 3", "part 2", "week 2"
+  const keywordMatch = clean.match(/(?:lec(?:ture)?|class|session|part|module|topic|week|w|p|c)[\s._\-#]*(\d+)/i);
   if (keywordMatch) return parseInt(keywordMatch[1], 10);
 
-  // Pattern C: Trailing number before extension "Intro - 05.mp4"
+  // Trailing number before extension "Intro - 05.mp4"
   const trailingMatch = clean.match(/[\s._\-#](\d+)(?:\.[a-z0-9]+)?$/i);
   if (trailingMatch) return parseInt(trailingMatch[1], 10);
 
-  // Pattern D: Any first standalone digits in filename
+  // Any first standalone digits
   const anyDigitsMatch = clean.match(/(\d+)/);
   if (anyDigitsMatch) return parseInt(anyDigitsMatch[1], 10);
 
@@ -62,14 +70,14 @@ export function extractSequenceNumber(filename: string): number {
 }
 
 /**
- * Strips extensions and numbering prefixes to produce a human-friendly lecture title.
+ * Strips extensions and numbering prefixes to produce a human-friendly lecture/topic title.
  */
 export function cleanLectureTitle(filename: string): string {
-  let name = filename.replace(/\.(mp4|mkv|webm|avi|mov|m4v|flv)$/i, '');
+  let name = filename.replace(/\.(mp4|mkv|webm|avi|mov|m4v|flv|pdf|png|jpg|jpeg|webp)$/i, '');
 
   // Strip leading prefixes like "01_", "01 - ", "Lecture 1 - ", "Lec 01: "
   name = name.replace(/^(\d+[\s._\-]+)+/, '');
-  name = name.replace(/^(lecture|lec|class|session|part)[\s._\-#]*\d+[\s._\-:]*/i, '');
+  name = name.replace(/^(lecture|lec|class|session|part|topic|module)[\s._\-#]*\d+[\s._\-:]*/i, '');
 
   // Replace underscores and multiple dashes with spaces
   name = name.replace(/[_-]+/g, ' ');
@@ -84,59 +92,55 @@ export function cleanLectureTitle(filename: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-/**
- * Normalizes a base filename for pairing videos with slides (e.g. "01_arrays" from "01_arrays.mp4").
- */
-function getBaseKey(filename: string): string {
-  return filename
-    .toLowerCase()
-    .replace(/\.[^/.]+$/, '')
-    .replace(/[-_](slides|notes|presentation|deck|handout|assignment)/g, '')
-    .replace(/[^a-z0-9]/g, '');
-}
-
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v'];
 const SLIDE_EXTENSIONS = ['.pdf'];
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif'];
+
+/**
+ * Classifies a Google Drive file by MIME type first, falling back to extension (Section 9).
+ */
+export function classifyResource(file: DriveFileItem): {
+  resourceType: DetectedResourceType;
+  cleanTitle: string;
+} {
+  const mime = (file.mimeType || '').toLowerCase();
+  const lowerName = file.name.toLowerCase();
+
+  let resourceType: DetectedResourceType = 'other';
+
+  if (mime.startsWith('video/') || VIDEO_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+    resourceType = 'video';
+  } else if (mime === 'application/pdf' || SLIDE_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+    resourceType = 'pdf';
+  } else if (mime.startsWith('image/') || IMAGE_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+    resourceType = 'photo';
+  } else {
+    resourceType = 'other';
+  }
+
+  return {
+    resourceType,
+    cleanTitle: cleanLectureTitle(file.name),
+  };
+}
 
 export function isVideoFile(file: DriveFileItem): boolean {
-  if (file.mimeType && file.mimeType.startsWith('video/')) return true;
-  const lower = file.name.toLowerCase();
-  return VIDEO_EXTENSIONS.some(ext => lower.endsWith(ext));
+  return classifyResource(file).resourceType === 'video';
 }
 
 export function isSlideFile(file: DriveFileItem): boolean {
-  if (file.mimeType === 'application/pdf') return true;
-  return file.name.toLowerCase().endsWith('.pdf');
+  return classifyResource(file).resourceType === 'pdf';
 }
 
 /**
- * Recursively queries Google Drive API v3 to list files in a folder and its subfolders.
+ * Internal helper to query items within a specific Drive parent folder with pagination.
  */
-export async function fetchDriveFolderHierarchy(
+async function fetchFolderContents(
   folderId: string,
-  authConfig: { accessToken?: string; apiKey?: string }
-): Promise<{ folderName: string; files: DriveFileItem[]; subfolders: { id: string; name: string }[] }> {
-  const { accessToken, apiKey } = authConfig;
-  const authHeader: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
-  const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
-
-  // 1. Get Folder Info
-  let folderName = 'Google Drive Course';
-  try {
-    const metaRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,mimeType${keyParam}`,
-      { headers: authHeader }
-    );
-    if (metaRes.ok) {
-      const meta = await metaRes.json();
-      if (meta.name) folderName = meta.name;
-    }
-  } catch (err) {
-    console.warn('[Drive Scanner] Could not fetch folder metadata:', err);
-  }
-
-  // 2. Fetch all direct files and subfolders
-  const allFiles: DriveFileItem[] = [];
+  authHeader: Record<string, string>,
+  keyParam: string
+): Promise<{ files: DriveFileItem[]; subfolders: { id: string; name: string }[] }> {
+  const files: DriveFileItem[] = [];
   const subfolders: { id: string; name: string }[] = [];
   let pageToken: string | undefined = undefined;
 
@@ -149,7 +153,7 @@ export async function fetchDriveFolderHierarchy(
     const res = await fetch(url, { headers: authHeader });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `Google Drive API returned status ${res.status}`);
+      throw new Error(errData?.error?.message || `Google Drive API error (status ${res.status})`);
     }
 
     const data = await res.json();
@@ -158,159 +162,399 @@ export async function fetchDriveFolderHierarchy(
         if (item.mimeType === 'application/vnd.google-apps.folder') {
           subfolders.push({ id: item.id, name: item.name });
         } else {
-          allFiles.push(item);
+          files.push(item);
         }
       }
     }
     pageToken = data.nextPageToken;
   } while (pageToken);
 
-  // 3. For any subfolders, fetch their files too (1 level deep of submodules)
-  for (const sub of subfolders) {
-    try {
-      const subQuery = `'${sub.id}' in parents and trashed = false`;
-      const subFields = 'files(id,name,mimeType,size,webViewLink,webContentLink,parents,createdTime,modifiedTime)';
-      const subUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(subQuery)}&pageSize=100&fields=${encodeURIComponent(subFields)}${keyParam}`;
-      const subRes = await fetch(subUrl, { headers: authHeader });
-      if (subRes.ok) {
-        const subData = await subRes.json();
-        if (subData.files && Array.isArray(subData.files)) {
-          for (const item of subData.files) {
-            if (item.mimeType !== 'application/vnd.google-apps.folder') {
-              allFiles.push(item);
-            }
-          }
-        }
-      }
-    } catch (subErr) {
-      console.warn(`[Drive Scanner] Could not scan subfolder '${sub.name}':`, subErr);
-    }
-  }
-
-  return { folderName, files: allFiles, subfolders };
+  return { files, subfolders };
 }
 
 /**
- * Organizes scanned Drive files into Modules and Topics with natural sorting and PDF pairing.
+ * Deterministic 3-Tier Hierarchy Parser (Section 2, 6, 7, 8):
+ * - Root Folder = Course Name
+ * - Files in Root = Course Resources (Section 8)
+ * - Level 1 Folders = Modules
+ * - Files in Level 1 = Module Resources (Section 7)
+ * - Level 2 Folders = Topics
+ * - Files in Level 2 = Topic Resources (Section 6)
  */
-export function organizeDriveFiles(
-  courseName: string,
-  folderId: string,
-  files: DriveFileItem[],
-  subfolders: { id: string; name: string }[]
-): DriveScanResult {
-  const videoFiles = files.filter(isVideoFile);
-  const slideFiles = files.filter(isSlideFile);
+export async function fetchDeterministicCourseHierarchy(
+  rootFolderId: string,
+  authConfig: { accessToken?: string; apiKey?: string }
+): Promise<DriveScanResult> {
+  const { accessToken, apiKey } = authConfig;
+  const authHeader: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+  const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
 
-  // Build a slide lookup map by base key
-  const slideMap = new Map<string, DriveFileItem>();
-  for (const slide of slideFiles) {
-    const key = getBaseKey(slide.name);
-    slideMap.set(key, slide);
-  }
-
-  const modulesMap = new Map<string, { name: string; order: number; lectures: DetectedLecture[] }>();
-
-  // If subfolders exist, use them as module containers
-  const subfolderMap = new Map(subfolders.map((s, idx) => [s.id, { name: s.name, order: idx + 1 }]));
-
-  let unassignedLectures: DetectedLecture[] = [];
-
-  for (const vid of videoFiles) {
-    const seq = extractSequenceNumber(vid.name);
-    const cleanTitle = cleanLectureTitle(vid.name);
-    const baseKey = getBaseKey(vid.name);
-    const matchedSlide = slideMap.get(baseKey);
-
-    const lecture: DetectedLecture = {
-      id: vid.id,
-      title: vid.name,
-      cleanName: cleanTitle,
-      sequenceNumber: seq,
-      fileSize: vid.size ? Number(vid.size) : undefined,
-      mimeType: vid.mimeType || 'video/mp4',
-      driveUrl: vid.webViewLink || `https://drive.google.com/file/d/${vid.id}/view`,
-      slidesFile: matchedSlide
-    };
-
-    // Check which parent folder this file belongs to
-    const parentId = vid.parents?.[0];
-    if (parentId && subfolderMap.has(parentId)) {
-      const parentInfo = subfolderMap.get(parentId)!;
-      if (!modulesMap.has(parentId)) {
-        modulesMap.set(parentId, { name: parentInfo.name, order: parentInfo.order, lectures: [] });
-      }
-      modulesMap.get(parentId)!.lectures.push(lecture);
-    } else {
-      unassignedLectures.push(lecture);
+  // 1. Fetch Root Folder Info
+  let courseName = 'Google Drive Course';
+  try {
+    const metaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${rootFolderId}?fields=id,name,mimeType${keyParam}`,
+      { headers: authHeader }
+    );
+    if (metaRes.ok) {
+      const meta = await metaRes.json();
+      if (meta.name) courseName = meta.name;
     }
+  } catch (err) {
+    console.warn('[Drive Scanner] Could not fetch course root metadata:', err);
   }
 
-  // Sort lectures within each subfolder module naturally
+  // 2. Fetch Level 0 (Root Course folder)
+  const rootContents = await fetchFolderContents(rootFolderId, authHeader, keyParam);
+
+  const courseResources: DetectedResource[] = rootContents.files.map(f => {
+    const info = classifyResource(f);
+    return {
+      id: f.id,
+      name: f.name,
+      cleanTitle: info.cleanTitle,
+      resourceType: info.resourceType,
+      mimeType: f.mimeType || 'application/octet-stream',
+      fileSize: f.size ? Number(f.size) : undefined,
+      driveUrl: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+      modifiedTime: f.modifiedTime,
+      parentFolderId: rootFolderId,
+    };
+  }).sort((a, b) => naturalCompare(a.name, b.name));
+
+  // Sort Level 1 Module Folders naturally
+  const moduleFolders = rootContents.subfolders.sort((a, b) => naturalCompare(a.name, b.name));
+
   const modules: DetectedModule[] = [];
-  modulesMap.forEach((val, id) => {
-    val.lectures.sort((a, b) => {
-      if (a.sequenceNumber !== b.sequenceNumber) return a.sequenceNumber - b.sequenceNumber;
-      return naturalCompare(a.title, b.title);
-    });
-    modules.push({
-      id,
-      name: val.name,
-      order: val.order,
-      lectures: val.lectures
-    });
-  });
+  let totalLectures = 0;
+  let totalSlides = 0;
+  let totalImages = 0;
+  let totalOthers = 0;
+  let rawFilesCount = courseResources.length;
 
-  // If there are unassigned lectures (or flat folder structure without subfolders):
-  if (unassignedLectures.length > 0) {
-    unassignedLectures.sort((a, b) => {
-      if (a.sequenceNumber !== b.sequenceNumber) return a.sequenceNumber - b.sequenceNumber;
-      return naturalCompare(a.title, b.title);
-    });
+  for (let mIdx = 0; mIdx < moduleFolders.length; mIdx++) {
+    const modFolder = moduleFolders[mIdx];
+    const modContents = await fetchFolderContents(modFolder.id, authHeader, keyParam);
+    rawFilesCount += modContents.files.length;
 
-    if (modules.length === 0) {
-      // Completely flat folder: split into chunks of 5-8 lectures per module
-      const CHUNK_SIZE = 6;
-      for (let i = 0; i < unassignedLectures.length; i += CHUNK_SIZE) {
-        const chunk = unassignedLectures.slice(i, i + CHUNK_SIZE);
-        const moduleIndex = Math.floor(i / CHUNK_SIZE) + 1;
-        const startLec = chunk[0].sequenceNumber !== 9999 ? chunk[0].sequenceNumber : i + 1;
-        const endLec = chunk[chunk.length - 1].sequenceNumber !== 9999 ? chunk[chunk.length - 1].sequenceNumber : i + chunk.length;
-        
-        modules.push({
-          id: `mod-flat-${moduleIndex}`,
-          name: `Module ${moduleIndex}: Lectures ${startLec}–${endLec}`,
-          order: moduleIndex,
-          lectures: chunk
+    // Module-level resources (Section 7)
+    const moduleResources: DetectedResource[] = modContents.files.map(f => {
+      const info = classifyResource(f);
+      return {
+        id: f.id,
+        name: f.name,
+        cleanTitle: info.cleanTitle,
+        resourceType: info.resourceType,
+        mimeType: f.mimeType || 'application/octet-stream',
+        fileSize: f.size ? Number(f.size) : undefined,
+        driveUrl: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+        modifiedTime: f.modifiedTime,
+        parentFolderId: modFolder.id,
+      };
+    }).sort((a, b) => naturalCompare(a.name, b.name));
+
+    // Sort Level 2 Topic Folders naturally
+    const topicFolders = modContents.subfolders.sort((a, b) => naturalCompare(a.name, b.name));
+    const topics: DetectedTopic[] = [];
+    const moduleLecturesLegacy: DetectedLecture[] = [];
+
+    // Case A: Level 2 folders exist -> deterministic Topics
+    if (topicFolders.length > 0) {
+      for (let tIdx = 0; tIdx < topicFolders.length; tIdx++) {
+        const topFolder = topicFolders[tIdx];
+        const topContents = await fetchFolderContents(topFolder.id, authHeader, keyParam);
+        rawFilesCount += topContents.files.length;
+
+        const topicResources: DetectedResource[] = topContents.files.map(f => {
+          const info = classifyResource(f);
+          return {
+            id: f.id,
+            name: f.name,
+            cleanTitle: info.cleanTitle,
+            resourceType: info.resourceType,
+            mimeType: f.mimeType || 'application/octet-stream',
+            fileSize: f.size ? Number(f.size) : undefined,
+            driveUrl: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+            modifiedTime: f.modifiedTime,
+            parentFolderId: topFolder.id,
+          };
+        }).sort((a, b) => naturalCompare(a.name, b.name));
+
+        // Group into legacy DetectedLecture format for compatibility
+        const topicLectures: DetectedLecture[] = topicResources
+          .filter(r => r.resourceType === 'video')
+          .map(v => {
+            const pairedSlide = topicResources.find(r => r.resourceType === 'pdf');
+            return {
+              id: v.id,
+              title: v.name,
+              cleanName: v.cleanTitle,
+              sequenceNumber: extractSequenceNumber(v.name),
+              fileSize: v.fileSize,
+              mimeType: v.mimeType,
+              driveUrl: v.driveUrl,
+              slidesFile: pairedSlide ? {
+                id: pairedSlide.id,
+                name: pairedSlide.name,
+                mimeType: pairedSlide.mimeType,
+                size: pairedSlide.fileSize,
+                webViewLink: pairedSlide.driveUrl,
+              } : undefined,
+            };
+          });
+
+        moduleLecturesLegacy.push(...topicLectures);
+
+        topics.push({
+          id: topFolder.id,
+          name: topFolder.name,
+          order: tIdx + 1,
+          resources: topicResources,
+          lectures: topicLectures,
         });
       }
     } else {
-      // Append leftover lectures to a "General Lectures" module
-      modules.push({
-        id: 'mod-general',
-        name: 'General Course Lectures',
-        order: modules.length + 1,
-        lectures: unassignedLectures
+      // Case B: Module has files directly inside but no Level 2 subfolders
+      // Group resources into a single topic representing this module, or create topics per video
+      const videosInModule = moduleResources.filter(r => r.resourceType === 'video');
+      if (videosInModule.length > 0) {
+        for (let vIdx = 0; vIdx < videosInModule.length; vIdx++) {
+          const vid = videosInModule[vIdx];
+          const pairedSlide = moduleResources.find(r => r.resourceType === 'pdf');
+          const lec: DetectedLecture = {
+            id: vid.id,
+            title: vid.name,
+            cleanName: vid.cleanTitle,
+            sequenceNumber: extractSequenceNumber(vid.name),
+            fileSize: vid.fileSize,
+            mimeType: vid.mimeType,
+            driveUrl: vid.driveUrl,
+            slidesFile: pairedSlide ? {
+              id: pairedSlide.id,
+              name: pairedSlide.name,
+              mimeType: pairedSlide.mimeType,
+              size: pairedSlide.fileSize,
+              webViewLink: pairedSlide.driveUrl,
+            } : undefined,
+          };
+          moduleLecturesLegacy.push(lec);
+          topics.push({
+            id: `top-${vid.id}`,
+            name: vid.cleanTitle,
+            order: vIdx + 1,
+            resources: [vid],
+            lectures: [lec],
+          });
+        }
+      } else {
+        // Only documents / notes
+        topics.push({
+          id: `top-mod-${modFolder.id}`,
+          name: `${modFolder.name} Materials`,
+          order: 1,
+          resources: moduleResources,
+          lectures: [],
+        });
+      }
+    }
+
+    modules.push({
+      id: modFolder.id,
+      name: modFolder.name,
+      order: mIdx + 1,
+      topics,
+      moduleResources,
+      lectures: moduleLecturesLegacy,
+    });
+  }
+
+  // Count resource totals across all tiers
+  const countInResources = (items: DetectedResource[]) => {
+    for (const item of items) {
+      if (item.resourceType === 'video') totalLectures++;
+      else if (item.resourceType === 'pdf') totalSlides++;
+      else if (item.resourceType === 'photo') totalImages++;
+      else totalOthers++;
+    }
+  };
+
+  countInResources(courseResources);
+  for (const mod of modules) {
+    countInResources(mod.moduleResources);
+    for (const top of mod.topics) {
+      countInResources(top.resources);
+    }
+  }
+
+  const totalTopics = modules.reduce((acc, m) => acc + m.topics.length, 0);
+
+  return {
+    courseName,
+    folderId: rootFolderId,
+    courseResources,
+    modules,
+    totalModules: modules.length,
+    totalTopics,
+    totalLectures,
+    totalSlides,
+    totalImages,
+    totalOthers,
+    rawFilesCount,
+  };
+}
+
+/**
+ * Backward compatibility wrapper for fetchDriveFolderHierarchy.
+ */
+export async function fetchDriveFolderHierarchy(
+  folderId: string,
+  authConfig: { accessToken?: string; apiKey?: string }
+): Promise<{ folderName: string; files: DriveFileItem[]; subfolders: { id: string; name: string }[] }> {
+  const result = await fetchDeterministicCourseHierarchy(folderId, authConfig);
+  const flattenedFiles: DriveFileItem[] = [];
+  
+  result.courseResources.forEach(r => {
+    flattenedFiles.push({
+      id: r.id,
+      name: r.name,
+      mimeType: r.mimeType,
+      size: r.fileSize,
+      webViewLink: r.driveUrl,
+    });
+  });
+
+  result.modules.forEach(m => {
+    m.moduleResources.forEach(r => {
+      flattenedFiles.push({
+        id: r.id,
+        name: r.name,
+        mimeType: r.mimeType,
+        size: r.fileSize,
+        webViewLink: r.driveUrl,
+        parents: [m.id],
+      });
+    });
+    m.topics.forEach(t => {
+      t.resources.forEach(r => {
+        flattenedFiles.push({
+          id: r.id,
+          name: r.name,
+          mimeType: r.mimeType,
+          size: r.fileSize,
+          webViewLink: r.driveUrl,
+          parents: [t.id],
+        });
+      });
+    });
+  });
+
+  const subfolders = result.modules.map(m => ({ id: m.id, name: m.name }));
+  return { folderName: result.courseName, files: flattenedFiles, subfolders };
+}
+
+/**
+ * Differential Sync Detector (Section 33 & 34):
+ * Detects newly added, renamed, or missing files between Google Drive and DegreeTrack.
+ */
+export interface CourseDiffResult {
+  newResources: DetectedResource[];
+  renamedResources: { existingId: string; oldTitle: string; newTitle: string; driveFileId: string }[];
+  missingResources: { existingId: string; title: string; driveFileId: string }[];
+  newTopics: DetectedTopic[];
+  newModules: DetectedModule[];
+  summary: string;
+}
+
+export function diffCourseWithDrive(
+  scanResult: DriveScanResult,
+  existingResources: { id: string; driveFileId?: string; title: string; isMissingSource?: boolean }[],
+  existingTopics: { id: string; driveFolderId?: string; name: string }[],
+  existingModules: { id: string; driveFolderId?: string; name: string }[]
+): CourseDiffResult {
+  const existingByDriveId = new Map<string, { id: string; title: string; driveFileId?: string }>();
+  for (const r of existingResources) {
+    if (r.driveFileId) {
+      existingByDriveId.set(r.driveFileId, r);
+    }
+  }
+
+  const existingTopicFolderIds = new Set(existingTopics.map(t => t.driveFolderId).filter(Boolean));
+  const existingModuleFolderIds = new Set(existingModules.map(m => m.driveFolderId).filter(Boolean));
+
+  const allScannedResources: DetectedResource[] = [
+    ...scanResult.courseResources,
+  ];
+
+  for (const m of scanResult.modules) {
+    allScannedResources.push(...m.moduleResources);
+    for (const t of m.topics) {
+      allScannedResources.push(...t.resources);
+    }
+  }
+
+  const scannedDriveFileIds = new Set(allScannedResources.map(r => r.id));
+
+  const newResources: DetectedResource[] = [];
+  const renamedResources: { existingId: string; oldTitle: string; newTitle: string; driveFileId: string }[] = [];
+  const missingResources: { existingId: string; title: string; driveFileId: string }[] = [];
+
+  for (const r of allScannedResources) {
+    const existing = existingByDriveId.get(r.id);
+    if (!existing) {
+      newResources.push(r);
+    } else if (existing.title !== r.name && existing.title !== r.cleanTitle) {
+      renamedResources.push({
+        existingId: existing.id,
+        oldTitle: existing.title,
+        newTitle: r.cleanTitle || r.name,
+        driveFileId: r.id,
       });
     }
   }
 
-  // Sort modules by order
-  modules.sort((a, b) => a.order - b.order);
+  for (const [driveId, existing] of existingByDriveId.entries()) {
+    if (!scannedDriveFileIds.has(driveId)) {
+      missingResources.push({
+        existingId: existing.id,
+        title: existing.title,
+        driveFileId: driveId,
+      });
+    }
+  }
+
+  const newModules = scanResult.modules.filter(m => !existingModuleFolderIds.has(m.id));
+  const newTopics: DetectedTopic[] = [];
+  for (const m of scanResult.modules) {
+    for (const t of m.topics) {
+      if (!existingTopicFolderIds.has(t.id)) {
+        newTopics.push(t);
+      }
+    }
+  }
+
+  const newVids = newResources.filter(r => r.resourceType === 'video').length;
+  const newDocs = newResources.filter(r => r.resourceType === 'pdf').length;
+
+  const summaryParts: string[] = [];
+  if (newVids > 0) summaryParts.push(`+ ${newVids} new lectures`);
+  if (newDocs > 0) summaryParts.push(`+ ${newDocs} new documents`);
+  if (renamedResources.length > 0) summaryParts.push(`~ ${renamedResources.length} renamed`);
+  if (missingResources.length > 0) summaryParts.push(`- ${missingResources.length} unavailable`);
+  if (summaryParts.length === 0) summaryParts.push('Course is up to date with Google Drive.');
 
   return {
-    courseName,
-    folderId,
-    totalLectures: videoFiles.length,
-    totalSlides: slideFiles.length,
-    modules,
-    rawFilesCount: files.length
+    newResources,
+    renamedResources,
+    missingResources,
+    newTopics,
+    newModules,
+    summary: summaryParts.join(', '),
   };
 }
 
 /**
  * AI-Assisted Course Organizer:
- * Uses Gemini BYOK to organize messy lecture titles into a beautiful pedagogical structure.
+ * Uses Gemini BYOK optionally without altering Google Drive files.
  */
 export async function aiStructureDriveFiles(
   scanResult: DriveScanResult,
@@ -325,7 +569,7 @@ export async function aiStructureDriveFiles(
   const fileManifest = allLectures.map(l => ({
     id: l.id,
     originalFilename: l.title,
-    sequenceGuess: l.sequenceNumber
+    sequenceGuess: l.sequenceNumber,
   }));
 
   const prompt = `You are a university curriculum organizer.
@@ -360,7 +604,7 @@ Return strictly JSON with this exact schema:
       apiKey,
       model,
       prompt,
-      systemPrompt: 'Respond strictly with valid JSON. Organize the course into balanced modules with 3-6 lectures each.'
+      systemPrompt: 'Respond strictly with valid JSON. Organize the course into balanced modules with 3-6 lectures each.',
     });
 
     const parsed = typeof res === 'string' ? JSON.parse(res) : res;
@@ -379,40 +623,48 @@ Return strictly JSON with this exact schema:
               const cleanTitle = parsed.cleanTitles?.[fid] || original.cleanName;
               modLectures.push({
                 ...original,
-                cleanName: cleanTitle
+                cleanName: cleanTitle,
               });
               lectureById.delete(fid);
             }
           }
         }
         if (modLectures.length > 0) {
+          const modTopics: DetectedTopic[] = modLectures.map((lec, lIdx) => ({
+            id: `ai-top-${lec.id}`,
+            name: lec.cleanName,
+            order: lIdx + 1,
+            resources: [{
+              id: lec.id,
+              name: lec.title,
+              cleanTitle: lec.cleanName,
+              resourceType: 'video',
+              mimeType: lec.mimeType,
+              fileSize: lec.fileSize,
+              driveUrl: lec.driveUrl,
+            }],
+            lectures: [lec],
+          }));
+
           newModules.push({
             id: `ai-mod-${modOrder}`,
             name: m.name || `Module ${modOrder}`,
             order: modOrder++,
-            lectures: modLectures
+            topics: modTopics,
+            moduleResources: [],
+            lectures: modLectures,
           });
         }
-      }
-
-      // Add any leftover lectures that weren't assigned
-      if (lectureById.size > 0) {
-        newModules.push({
-          id: `ai-mod-extra`,
-          name: 'Additional Lectures',
-          order: modOrder,
-          lectures: Array.from(lectureById.values())
-        });
       }
 
       return {
         ...scanResult,
         courseName: parsed.courseTitle || scanResult.courseName,
-        modules: newModules
+        modules: newModules,
       };
     }
   } catch (err) {
-    console.warn('[AI Course Organizer] Failed to structure with Gemini, using heuristic layout:', err);
+    console.warn('[AI Course Organizer] Failed to structure with Gemini, keeping deterministic layout:', err);
   }
 
   return scanResult;

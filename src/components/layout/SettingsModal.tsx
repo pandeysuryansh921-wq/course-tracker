@@ -8,7 +8,16 @@ import { useUserStore } from '@/stores/useUserStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { SUPPORTED_MODELS, AIProvider } from '@/types/ai';
 import { exportCourseToZip, importCourseFromZip } from '@/lib/exportImport';
-import { syncToGoogleDrive, restoreFromGoogleDrive, signOutGoogle, checkLastBackupTime, saveUserLocally } from '@/lib/driveSync';
+import { 
+  syncToGoogleDrive, 
+  restoreFromGoogleDrive, 
+  signOutGoogle, 
+  checkLastBackupTime, 
+  saveUserLocally,
+  getCourseLibraryUser,
+  disconnectCourseLibrary,
+  getCourseLibraryAccessToken
+} from '@/lib/driveSync';
 import { useVideoCacheStore } from '@/stores/useVideoCacheStore';
 import { formatBytes } from '@/lib/drive/cacheManager';
 import { 
@@ -57,6 +66,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [driveStatus, setDriveStatus] = useState<string>('');
   const [driveUser, setDriveUser] = useState<any>(null);
 
+  const [courseLibraryUser, setCourseLibraryUser] = useState<any>(null);
+  const [isConnectingLibrary, setIsConnectingLibrary] = useState(false);
+
   const videoSettings = useVideoCacheStore((state) => state.settings);
   const updateVideoSettings = useVideoCacheStore((state) => state.updateSettings);
   const clearAllVideoCache = useVideoCacheStore((state) => state.clearAllCache);
@@ -70,6 +82,28 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
+  const handleConnectCourseLibrary = async () => {
+    try {
+      setIsConnectingLibrary(true);
+      setError(null);
+      const res = await getCourseLibraryAccessToken(true);
+      if (res && res.user) {
+        setCourseLibraryUser(getCourseLibraryUser() || res.user);
+        setSuccess('Connected to Private Course Library!');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect Course Library');
+    } finally {
+      setIsConnectingLibrary(false);
+    }
+  };
+
+  const handleDisconnectCourseLibrary = async () => {
+    await disconnectCourseLibrary();
+    setCourseLibraryUser(null);
+  };
+
   React.useEffect(() => {
     if (courses.length > 0 && !selectedCourseId) {
       setSelectedCourseId(courses[0].id);
@@ -81,6 +115,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       checkLastBackupTime().then(res => {
         if (res && res.user) setDriveUser(res.user);
       }).catch(() => {});
+
+      const libUser = getCourseLibraryUser();
+      if (libUser) setCourseLibraryUser(libUser);
 
       if (aiKeys.gemini && aiKeys.gemini.trim().length >= 20) {
         autoDiscoverModels('gemini').catch(() => {});
@@ -396,12 +433,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
         </div>
 
-        {/* Smart Video Offline Cache Section */}
+        {/* Private Course Library & Video Cache Section */}
         <div className="flex flex-col gap-3 pb-6 border-b border-border">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
               <Video className="w-4 h-4 text-red-500" />
-              Smart Video Offline Cache
+              Private Course Library & Video Cache
             </h3>
             <span className="text-[11px] font-medium text-slate-500">
               Storage: <strong className="text-slate-800 dark:text-slate-200">{formatBytes(totalVideoStorage)}</strong>
@@ -409,10 +446,79 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
 
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Automatically pre-downloads upcoming lectures in the background while studying. Watched lectures are automatically removed from your device after a retention period to preserve storage (Google Drive files remain untouched).
+            Connects securely to your Google Drive to scan private hierarchical course folders and stream or cache lecture videos locally for smooth, offline-ready playback.
           </p>
 
+          {/* Course Library OAuth Connection Card */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/10 text-blue-500 rounded-lg">
+                <Cloud size={18} />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block">
+                  Private Course Library Access
+                </span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                  {courseLibraryUser ? `Connected as ${courseLibraryUser.email || courseLibraryUser.name}` : 'Read-only access to course lecture folders'}
+                </span>
+              </div>
+            </div>
+
+            {courseLibraryUser ? (
+              <button
+                type="button"
+                onClick={handleDisconnectCourseLibrary}
+                className="px-2.5 py-1 text-xs text-red-500 hover:text-red-600 font-medium rounded-lg border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                title="Disconnect Course Library"
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleConnectCourseLibrary}
+                disabled={isConnectingLibrary}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                {isConnectingLibrary ? <Loader2 size={12} className="animate-spin" /> : <Cloud size={12} />}
+                <span>Authorize</span>
+              </button>
+            )}
+          </div>
+
+          {/* Video Cache Controls Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                Max Cache Storage Cap
+              </label>
+              <select
+                value={videoSettings.maxCacheBytes || 5368709120}
+                onChange={(e) => updateVideoSettings({ maxCacheBytes: Number(e.target.value) })}
+                className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
+              >
+                <option value={2147483648}>2 GB Cap</option>
+                <option value={5368709120}>5 GB Cap (Recommended)</option>
+                <option value={10737418240}>10 GB Cap</option>
+                <option value={0}>Unlimited</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                Network Download Rule
+              </label>
+              <select
+                value={videoSettings.wifiOnly ? 'wifi' : 'all'}
+                onChange={(e) => updateVideoSettings({ wifiOnly: e.target.value === 'wifi' })}
+                className="w-full py-1.5 px-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium"
+              >
+                <option value="wifi">Wi-Fi Only (Recommended)</option>
+                <option value="all">Wi-Fi &amp; Cellular Data</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-[11px] font-medium text-slate-500 mb-1">
                 Background Prefetch Window
@@ -425,6 +531,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <option value={1}>Download Next 1 Lecture</option>
                 <option value={2}>Download Next 2 Lectures (Recommended)</option>
                 <option value={3}>Download Next 3 Lectures</option>
+                <option value={5}>Download Next 5 Lectures</option>
                 <option value={0}>Disabled (Stream Only)</option>
               </select>
             </div>
