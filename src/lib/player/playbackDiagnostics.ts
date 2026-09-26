@@ -31,15 +31,21 @@ class PlaybackDiagnosticsManager {
     hasError: false,
     steps: [
       { step: '01', name: 'Resource click', status: 'pending', timestamp: Date.now() },
-      { step: '02', name: 'Android native confirmed', status: 'pending', timestamp: Date.now() },
-      { step: '03', name: 'Drive file ID verified', status: 'pending', timestamp: Date.now() },
-      { step: '04', name: 'VideoPlayerModal mounted', status: 'pending', timestamp: Date.now() },
+      { step: '02', name: 'Video classified', status: 'pending', timestamp: Date.now() },
+      { step: '03', name: 'Android native confirmed', status: 'pending', timestamp: Date.now() },
+      { step: '04', name: 'Drive file ID resolved', status: 'pending', timestamp: Date.now() },
       { step: '05', name: 'Media3 plugin available', status: 'pending', timestamp: Date.now() },
       { step: '06', name: 'OAuth token acquired', status: 'pending', timestamp: Date.now() },
       { step: '07', name: 'Source resolved', status: 'pending', timestamp: Date.now() },
       { step: '08', name: 'Plugin invoked', status: 'pending', timestamp: Date.now() },
-      { step: '09', name: 'Native Activity launched', status: 'pending', timestamp: Date.now() },
-      { step: '10', name: 'ExoPlayer playback ready', status: 'pending', timestamp: Date.now() },
+      { step: '09', name: 'Intent created', status: 'pending', timestamp: Date.now() },
+      { step: '10', name: 'Activity onCreate', status: 'pending', timestamp: Date.now() },
+        { step: '11', name: 'ExoPlayer initialized', status: 'pending', timestamp: Date.now() },
+        { step: '12', name: 'MediaSource created', status: 'pending', timestamp: Date.now() },
+        { step: '13', name: 'prepare()', status: 'pending', timestamp: Date.now() },
+        { step: '14', name: 'BUFFERING', status: 'pending', timestamp: Date.now() },
+        { step: '15', name: 'READY', status: 'pending', timestamp: Date.now() },
+        { step: '16', name: 'PLAYING', status: 'pending', timestamp: Date.now() },
     ]
   };
 
@@ -56,15 +62,21 @@ class PlaybackDiagnosticsManager {
       errorDetails: undefined,
       steps: [
         { step: '01', name: 'Resource click', status: 'pending', timestamp: Date.now() },
-        { step: '02', name: 'Android native confirmed', status: 'pending', timestamp: Date.now() },
-        { step: '03', name: 'Drive file ID verified', status: 'pending', timestamp: Date.now() },
-        { step: '04', name: 'VideoPlayerModal mounted', status: 'pending', timestamp: Date.now() },
+        { step: '02', name: 'Video classified', status: 'pending', timestamp: Date.now() },
+        { step: '03', name: 'Android native confirmed', status: 'pending', timestamp: Date.now() },
+        { step: '04', name: 'Drive file ID resolved', status: 'pending', timestamp: Date.now() },
         { step: '05', name: 'Media3 plugin available', status: 'pending', timestamp: Date.now() },
         { step: '06', name: 'OAuth token acquired', status: 'pending', timestamp: Date.now() },
         { step: '07', name: 'Source resolved', status: 'pending', timestamp: Date.now() },
         { step: '08', name: 'Plugin invoked', status: 'pending', timestamp: Date.now() },
-        { step: '09', name: 'Native Activity launched', status: 'pending', timestamp: Date.now() },
-        { step: '10', name: 'ExoPlayer playback ready', status: 'pending', timestamp: Date.now() },
+        { step: '09', name: 'Intent created', status: 'pending', timestamp: Date.now() },
+        { step: '10', name: 'Activity onCreate', status: 'pending', timestamp: Date.now() },
+        { step: '11', name: 'ExoPlayer initialized', status: 'pending', timestamp: Date.now() },
+        { step: '12', name: 'MediaSource created', status: 'pending', timestamp: Date.now() },
+        { step: '13', name: 'prepare()', status: 'pending', timestamp: Date.now() },
+        { step: '14', name: 'BUFFERING', status: 'pending', timestamp: Date.now() },
+        { step: '15', name: 'READY', status: 'pending', timestamp: Date.now() },
+        { step: '16', name: 'PLAYING', status: 'pending', timestamp: Date.now() },
       ]
     };
     this.notify();
@@ -90,7 +102,7 @@ class PlaybackDiagnosticsManager {
       console.error(`${logTag} ✗ ${cleanDetail}`);
       this.state.hasError = true;
       if (detail && !this.state.errorMessage) {
-        this.state.errorMessage = detail;
+        this.state.errorMessage = this.sanitizeDetail(detail);
       }
     } else {
       console.log(`${logTag} ⏳ ${cleanDetail}`);
@@ -117,10 +129,10 @@ class PlaybackDiagnosticsManager {
   }
 
   public recordError(errorMessage: string, errorDetails?: string) {
-    console.error(`[PLAYER_TRACE_ERROR] ${errorMessage}`, errorDetails || '');
+    console.error(`[PLAYER_TRACE_ERROR] ${this.sanitizeDetail(errorMessage)}`, this.sanitizeDetail(errorDetails));
     this.state.hasError = true;
-    this.state.errorMessage = errorMessage;
-    this.state.errorDetails = errorDetails;
+    this.state.errorMessage = this.sanitizeDetail(errorMessage);
+    this.state.errorDetails = this.sanitizeDetail(errorDetails);
     this.notify();
   }
 
@@ -135,6 +147,7 @@ class PlaybackDiagnosticsManager {
   }
 
   private notify() {
+    this.state = { ...this.state, steps: [...this.state.steps] };
     for (const listener of this.listeners) {
       listener(this.state);
     }
@@ -146,9 +159,8 @@ class PlaybackDiagnosticsManager {
   public sanitizeDetail(str?: string): string {
     if (!str) return '';
     // Replace Bearer tokens if inadvertently embedded
-    return str.replace(/ya29\.[a-zA-Z0-9_-]{20,}/g, (match) => {
-      return `${match.substring(0, 8)}...[len=${match.length}]`;
-    });
+    return str.replace(/Bearer\s+[^\s"',;]+/gi, 'Bearer [REDACTED]')
+      .replace(/ya29\.[a-zA-Z0-9_.-]+/g, '[REDACTED]');
   }
 
   /**

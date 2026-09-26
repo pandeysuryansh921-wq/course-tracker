@@ -1,6 +1,8 @@
 package com.degreetrack.quiz.player;
 
 import android.app.Activity;
+import java.util.ArrayList;
+import java.util.Arrays;
 import android.content.Intent;
 import android.util.Log;
 
@@ -47,7 +49,6 @@ public class LecturePlayerPlugin extends Plugin {
         JSObject nextTopic = call.getObject("nextTopic");
 
         int tokenLength = (accessToken != null) ? accessToken.trim().length() : 0;
-        String tokenPrefix = (tokenLength > 6) ? accessToken.trim().substring(0, 6) + "..." : "none";
 
         Log.i(TAG, "[PLAYER_TRACE_09] LecturePlayerPlugin.playLecture() received: " +
                 "fileId=" + fileId +
@@ -56,11 +57,11 @@ public class LecturePlayerPlugin extends Plugin {
                 ", topicId=" + topicId +
                 ", isOffline=" + isOffline +
                 ", hasToken=" + (tokenLength > 0) +
-                ", tokenPrefix=" + tokenPrefix +
                 ", tokenLength=" + tokenLength +
                 ", currentTime=" + currentTime);
 
         Intent intent = new Intent(getContext(), LecturePlayerActivity.class);
+        intent.putStringArrayListExtra("nativeTrace", new ArrayList<>(Arrays.asList("08", "09")));
         intent.putExtra("fileId", fileId);
         intent.putExtra("videoUrl", videoUrl);
         intent.putExtra("accessToken", accessToken);
@@ -80,11 +81,11 @@ public class LecturePlayerPlugin extends Plugin {
         }
 
         try {
-            Log.i(TAG, "[PLAYER_TRACE_10] Creating Intent and launching LecturePlayerActivity via startActivityForResult");
+            Log.i(TAG, "[PLAYER_TRACE_09] Creating Intent and launching LecturePlayerActivity via startActivityForResult");
             startActivityForResult(call, intent, "lecturePlayerResult");
-            Log.i(TAG, "[PLAYER_TRACE_10] startActivityForResult dispatched successfully");
+            Log.i(TAG, "[PLAYER_TRACE_09] startActivityForResult dispatched successfully");
         } catch (Exception e) {
-            Log.e(TAG, "[PLAYER_TRACE_10] Failed to start LecturePlayerActivity: " + e.getMessage(), e);
+            Log.e(TAG, "[PLAYER_TRACE_09] Failed to start LecturePlayerActivity: " + e.getMessage(), e);
             call.reject("Failed to start LecturePlayerActivity: " + e.getMessage());
         }
     }
@@ -92,16 +93,20 @@ public class LecturePlayerPlugin extends Plugin {
     @ActivityCallback
     public void lecturePlayerResult(PluginCall call, ActivityResult result) {
         int resultCode = (result != null) ? result.getResultCode() : Activity.RESULT_CANCELED;
-        Log.i(TAG, "[PLAYER_TRACE_20] LecturePlayerPlugin.lecturePlayerResult received resultCode=" + resultCode);
+        Log.i(TAG, "[PLAYER_TRACE_RESULT] LecturePlayerPlugin.lecturePlayerResult received resultCode=" + resultCode);
 
         if (call == null) {
-            Log.w(TAG, "[PLAYER_TRACE_20] lecturePlayerResult: call is null!");
+            Log.w(TAG, "[PLAYER_TRACE_RESULT] lecturePlayerResult: call is null!");
             return;
         }
 
         JSObject ret = new JSObject();
         if (result != null && result.getData() != null) {
             Intent data = result.getData();
+            ArrayList<String> trace = data.getStringArrayListExtra("nativeTrace");
+            JSArray stages = new JSArray();
+            if (trace != null) for (String stage : trace) stages.put(stage);
+            ret.put("nativeTrace", stages);
             boolean hasError = data.getBooleanExtra("hasError", false);
 
             if (hasError) {
@@ -111,7 +116,7 @@ public class LecturePlayerPlugin extends Plugin {
                 int httpStatus = data.getIntExtra("httpStatus", -1);
                 String errDetails = data.getStringExtra("errorDetails");
 
-                Log.e(TAG, "[PLAYER_TRACE_20] Playback returned failure: " + errMsg + " (code: " + errCodeName + ", http: " + httpStatus + ")");
+                Log.e(TAG, "[PLAYER_TRACE_RESULT] Playback returned failure: " + errMsg + " (code: " + errCodeName + ", http: " + httpStatus + ")");
                 ret.put("hasError", true);
                 ret.put("errorMessage", errMsg);
                 ret.put("errorCode", errCode);
@@ -126,7 +131,7 @@ public class LecturePlayerPlugin extends Plugin {
                 boolean nextReq = data.getBooleanExtra("nextRequested", false);
                 String nextTopId = data.getStringExtra("nextTopicId");
 
-                Log.i(TAG, "[PLAYER_TRACE_20] Playback result: topicId=" + data.getStringExtra("topicId") +
+                Log.i(TAG, "[PLAYER_TRACE_RESULT] Playback result: topicId=" + data.getStringExtra("topicId") +
                         ", currentTime=" + curTime +
                         ", duration=" + dur +
                         ", isCompleted=" + completed +
@@ -153,12 +158,12 @@ public class LecturePlayerPlugin extends Plugin {
                     ret.put("notesAdded", new JSArray());
                 }
             } else {
-                Log.i(TAG, "[PLAYER_TRACE_20] LecturePlayerActivity closed or cancelled by user");
+                Log.i(TAG, "[PLAYER_TRACE_RESULT] LecturePlayerActivity closed or cancelled by user");
                 ret.put("cancelled", true);
                 ret.put("hasError", false);
             }
         } else {
-            Log.i(TAG, "[PLAYER_TRACE_20] Activity finished with no result data");
+            Log.i(TAG, "[PLAYER_TRACE_RESULT] Activity finished with no result data");
             ret.put("cancelled", true);
             ret.put("hasError", false);
         }

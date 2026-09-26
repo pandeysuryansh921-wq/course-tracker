@@ -30,6 +30,7 @@ export interface PlayLectureResult {
   nextRequested?: boolean;
   nextTopicId?: string;
   cancelled?: boolean;
+  nativeTrace?: string[];
   hasError?: boolean;
   errorMessage?: string;
   errorCode?: number;
@@ -84,15 +85,10 @@ export async function isMedia3ExoPlayerAvailable(): Promise<boolean> {
  * Dispatches playLecture across Capacitor bridge with PLAYER_TRACE_08 logging.
  */
 export async function playNativeLecture(options: PlayLectureOptions): Promise<PlayLectureResult> {
-  const sanitizedToken = options.accessToken
-    ? `${options.accessToken.substring(0, 8)}... (len: ${options.accessToken.length})`
-    : 'None';
-
   console.log('[PLAYER_TRACE_08] NativeLecturePlayer.playLecture() invoking across bridge:', {
     fileId: options.fileId,
     videoUrl: options.videoUrl,
     hasToken: Boolean(options.accessToken),
-    tokenSanitized: sanitizedToken,
     title: options.title,
     courseTitle: options.courseTitle,
     topicId: options.topicId,
@@ -106,18 +102,16 @@ export async function playNativeLecture(options: PlayLectureOptions): Promise<Pl
     const result = await NativeLecturePlayer.playLecture(options);
     console.log('[PLAYER_TRACE_08] NativeLecturePlayer.playLecture() result received from bridge:', result);
 
+    for (const step of result.nativeTrace || []) {
+      playbackDiagnostics.recordStep(step, 'success', 'Confirmed by Android');
+    }
     if (result.hasError) {
-      playbackDiagnostics.recordStep(
-        '08',
-        'failed',
-        `Native error: ${result.errorMessage || 'Playback error'} (code: ${result.errorCodeName || result.errorCode})`
-      );
-      playbackDiagnostics.recordStep('10', 'failed', result.errorMessage);
+      playbackDiagnostics.recordError(result.errorMessage || 'Native playback failed', `Code: ${result.errorCodeName || result.errorCode}; HTTP: ${result.httpStatus ?? 'n/a'}; ${result.errorDetails || ''}`);
     } else if (result.cancelled) {
       playbackDiagnostics.recordStep('08', 'success', 'Player closed / cancelled by user');
     } else {
       playbackDiagnostics.recordStep('08', 'success', 'Playback completed successfully');
-      playbackDiagnostics.recordStep('10', 'success', `Progress: ${result.watchedPercentage || 0}%`);
+
     }
 
     return result;

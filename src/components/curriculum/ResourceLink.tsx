@@ -22,21 +22,12 @@ import { downloadBase64File } from '@/lib/utils';
 import VideoPlayerModal from '@/components/study/VideoPlayerModal';
 import { playbackDiagnostics } from '@/lib/player/playbackDiagnostics';
 import { Capacitor } from '@capacitor/core';
+import { extractDriveFileId, isVideoResource } from '@/lib/player/videoResource';
+export { extractDriveFileId } from '@/lib/player/videoResource';
 
 interface ResourceLinkProps {
   resource: Resource;
   isEditMode?: boolean;
-}
-
-export function extractDriveFileId(url: string): string {
-  if (!url) return '';
-  const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
-                url.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
-                url.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
-                url.match(/id=([a-zA-Z0-9_-]+)/);
-  if (match) return match[1];
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(url)) return url;
-  return '';
 }
 
 export default function ResourceLink({ resource, isEditMode = false }: ResourceLinkProps) {
@@ -50,12 +41,7 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
 
   const driveFileId = resource.driveFileId || extractDriveFileId(resource.url || '');
 
-  const isVideo = 
-    resource.type?.toLowerCase() === 'video' ||
-    Boolean(resource.mimeType?.startsWith('video/')) ||
-    Boolean(driveFileId && (resource.mimeType?.startsWith('video/') || resource.role === 'PRIMARY' || resource.type === 'video')) ||
-    Boolean(resource.url?.match(/\.(mp4|mkv|webm|mov|m4v|avi)(\?.*)?$/i)) ||
-    Boolean(resource.title?.match(/\.(mp4|mkv|webm|mov|m4v|avi)$/i));
+  const isVideo = isVideoResource(resource);
 
   const isInline = !isVideo && ['pdf', 'photo'].includes(resource.type?.toLowerCase());
 
@@ -101,6 +87,8 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
       fileId: driveFileId
     });
 
+    playbackDiagnostics.recordStep('02', isVideo ? 'success' : 'skipped', `Video classified: ${isVideo}`);
+
     playbackDiagnostics.setMeta({
       platform,
       isNative
@@ -112,22 +100,22 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
       `Title: "${resource.title}", Type: ${resource.type || 'unknown'}, isVideo: ${isVideo}`
     );
 
-    // Stage 02: Native Android confirmation
+    // Stage 03: Native Android confirmation
     if (isNative && platform === 'android') {
-      console.log('[PLAYER_TRACE_02] Native Android confirmed: platform=android, isNative=true');
-      playbackDiagnostics.recordStep('02', 'success', 'Native Android tablet environment');
+      console.log('[PLAYER_TRACE_03] Native Android confirmed: platform=android, isNative=true');
+      playbackDiagnostics.recordStep('03', 'success', 'Native Android tablet environment');
     } else {
-      console.log(`[PLAYER_TRACE_02] Platform check: platform=${platform}, isNative=${isNative}`);
-      playbackDiagnostics.recordStep('02', isNative ? 'success' : 'skipped', `Platform: ${platform} (isNative: ${isNative})`);
+      console.log(`[PLAYER_TRACE_03] Platform check: platform=${platform}, isNative=${isNative}`);
+      playbackDiagnostics.recordStep('03', isNative ? 'success' : 'skipped', `Platform: ${platform} (isNative: ${isNative})`);
     }
 
-    // Stage 03: Drive file ID check
+    // Stage 04: Drive file ID check
     if (driveFileId) {
-      console.log(`[PLAYER_TRACE_03] Drive file ID verified: ${driveFileId}`);
-      playbackDiagnostics.recordStep('03', 'success', `File ID: ${driveFileId}`);
+      console.log(`[PLAYER_TRACE_04] Drive file ID verified: ${driveFileId}`);
+      playbackDiagnostics.recordStep('04', 'success', `File ID: ${driveFileId}`);
     } else if (isVideo) {
-      console.warn('[PLAYER_TRACE_03] Video resource has no detectable Drive file ID');
-      playbackDiagnostics.recordStep('03', 'failed', 'No Drive file ID found in resource');
+      console.warn('[PLAYER_TRACE_04] Video resource has no detectable Drive file ID');
+      playbackDiagnostics.recordStep('04', 'failed', 'No Drive file ID found in resource');
     }
 
     if (isVideo) {
@@ -179,6 +167,8 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
       fileId: driveFileId
     });
 
+    playbackDiagnostics.recordStep('02', isVideo ? 'success' : 'skipped', `Video classified: ${isVideo}`);
+
     playbackDiagnostics.setMeta({
       platform,
       isNative
@@ -191,18 +181,18 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
     );
 
     if (isNative && platform === 'android') {
-      console.log('[PLAYER_TRACE_02] Native Android confirmed: platform=android, isNative=true');
-      playbackDiagnostics.recordStep('02', 'success', 'Native Android tablet environment');
+      console.log('[PLAYER_TRACE_03] Native Android confirmed: platform=android, isNative=true');
+      playbackDiagnostics.recordStep('03', 'success', 'Native Android tablet environment');
     } else {
-      playbackDiagnostics.recordStep('02', isNative ? 'success' : 'skipped', `Platform: ${platform} (isNative: ${isNative})`);
+      playbackDiagnostics.recordStep('03', isNative ? 'success' : 'skipped', `Platform: ${platform} (isNative: ${isNative})`);
     }
 
     if (driveFileId) {
-      console.log(`[PLAYER_TRACE_03] Drive file ID verified: ${driveFileId}`);
-      playbackDiagnostics.recordStep('03', 'success', `File ID: ${driveFileId}`);
+      console.log(`[PLAYER_TRACE_04] Drive file ID verified: ${driveFileId}`);
+      playbackDiagnostics.recordStep('04', 'success', `File ID: ${driveFileId}`);
     } else {
-      console.warn('[PLAYER_TRACE_03] Drive file ID missing for Play action');
-      playbackDiagnostics.recordStep('03', 'failed', 'Missing Drive file ID');
+      console.warn('[PLAYER_TRACE_04] Drive file ID missing for Play action');
+      playbackDiagnostics.recordStep('04', 'failed', 'Missing Drive file ID');
     }
 
     setIsVideoModalOpen(true);

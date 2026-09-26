@@ -24,12 +24,16 @@ import {
 } from 'lucide-react';
 import { useVideoCacheStore } from '@/stores/useVideoCacheStore';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
-import { resolveVideoSource, formatBytes, ResolvedVideoSource } from '@/lib/drive/cacheManager';
+import { resolveVideoSource, isVideoCachedLocally, formatBytes, ResolvedVideoSource } from '@/lib/drive/cacheManager';
 import { getCourseLibraryAccessToken } from '@/lib/driveSync';
 import { playNativeLecture, isMedia3ExoPlayerAvailable } from '@/lib/player/lecturePlayerBridge';
 import { playbackDiagnostics, PlaybackDiagnosticsState } from '@/lib/player/playbackDiagnostics';
 import PlaybackDiagnosticOverlay from './PlaybackDiagnosticOverlay';
 import { Capacitor } from '@capacitor/core';
+import { extractDriveFileId, isVideoResource } from '@/lib/player/videoResource';
+import type { VideoNote } from '@/types/video';
+
+const EMPTY_NOTES: VideoNote[] = [];
 
 interface VideoPlayerModalProps {
   isOpen: boolean;
@@ -75,6 +79,7 @@ export default function VideoPlayerModal({
   const [isLaunchingNative, setIsLaunchingNative] = useState<boolean>(true);
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [showDiagOverlay, setShowDiagOverlay] = useState<boolean>(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [diagState, setDiagState] = useState<PlaybackDiagnosticsState>(playbackDiagnostics.getState());
 
   // Determine platform dynamically on client mount
@@ -107,7 +112,7 @@ export default function VideoPlayerModal({
   }, [initialTopicId, initialLectureTitle, initialFileId]);
 
   const cachedItem = useVideoCacheStore((state) => state.cachedVideos[activeTopicId]);
-  const notes = useVideoCacheStore((state) => state.videoNotes[activeTopicId] || []);
+  const notes = useVideoCacheStore((state) => state.videoNotes[activeTopicId] || EMPTY_NOTES);
   const downloadVideo = useVideoCacheStore((state) => state.downloadVideo);
   const deleteLocalCache = useVideoCacheStore((state) => state.deleteLocalCache);
   const togglePinOffline = useVideoCacheStore((state) => state.togglePinOffline);
@@ -125,9 +130,9 @@ export default function VideoPlayerModal({
   const currentCourse = courses.find((c) => c.id === effectiveCourseId);
 
   // Sequential topics
-  const courseModules = modules
+  const courseModules = React.useMemo(() => modules
     .filter((m) => m.courseId === effectiveCourseId)
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => a.order - b.order), [modules, effectiveCourseId]);
 
   const orderedCourseTopics = React.useMemo(() => {
     if (courseModules.length > 0) {
@@ -144,14 +149,14 @@ export default function VideoPlayerModal({
   const currentIndex = orderedCourseTopics.findIndex((t) => t.id === activeTopicId);
   const nextTopic = currentIndex !== -1 && currentIndex + 1 < orderedCourseTopics.length ? orderedCourseTopics[currentIndex + 1] : null;
   const nextTopicCache = nextTopic ? useVideoCacheStore.getState().cachedVideos[nextTopic.id] : null;
-  const nextTopicVideoRes = nextTopic ? resources.find((r) => r.topicId === nextTopic.id && (r.type === 'video' || r.type?.toLowerCase() === 'video' || Boolean(r.driveFileId))) : null;
-  const nextFileId = nextTopicVideoRes?.driveFileId || nextTopicVideoRes?.url?.match(/[\/=]([a-zA-Z0-9_-]{20,})/)?.[1];
+  const nextTopicVideoRes = nextTopic ? resources.find((r) => r.topicId === nextTopic.id && isVideoResource(r)) : null;
+  const nextFileId = nextTopicVideoRes?.driveFileId || extractDriveFileId(nextTopicVideoRes?.url || '');
 
   const switchToTopic = useCallback((targetTopicId: string) => {
     const target = orderedCourseTopics.find((t) => t.id === targetTopicId);
     if (!target) return;
-    const res = resources.find((r) => r.topicId === target.id && (r.type === 'video' || r.type?.toLowerCase() === 'video' || Boolean(r.driveFileId)));
-    const fId = res?.driveFileId || res?.url?.match(/[\/=]([a-zA-Z0-9_-]{20,})/)?.[1] || '';
+    const res = resources.find((r) => r.topicId === target.id && isVideoResource(r));
+    const fId = res?.driveFileId || extractDriveFileId(res?.url || '') || '';
 
     setActiveTopicId(target.id);
     setActiveLectureTitle(target.name);
@@ -217,25 +222,48 @@ export default function VideoPlayerModal({
       playbackDiagnostics.recordStep('05', 'failed', availErr?.message || String(availErr));
     }
 
+    if (!mountedRef.current) return;
+    if (isNativePlatform && platform === 'android' && !isNativeAndroid) {
+      setNativeError('Media3 ExoPlayer plugin is not available on this Android device.');
+      setIsLaunchingNative(false);
+      setShowDiagOverlay(true);
+      return;
+    }
+
+    const hasLocalVideo = await isVideoCachedLocally(activeFileId, cachedItem?.localUri);
+    if (!mountedRef.current) return;
+
     // Stage 06: Acquire Course Library OAuth token
     let token: string | undefined;
-    playbackDiagnostics.recordStep('06', 'running', 'Requesting OAuth access token...');
-    try {
-      console.log('[PLAYER_TRACE_06] Fetching Course Library OAuth token...');
-      const authRes = await getCourseLibraryAccessToken();
-      token = authRes?.token;
-      if (token) {
-        const sanitized = `${token.substring(0, 8)}... (len: ${token.length})`;
-        console.log(`[PLAYER_TRACE_06] Token acquired: ${sanitized}`);
-        playbackDiagnostics.recordStep('06', 'success', `Token valid (len: ${token.length})`);
-      } else {
-        console.warn('[PLAYER_TRACE_06] No token returned from getCourseLibraryAccessToken');
-        playbackDiagnostics.recordStep('06', 'failed', 'No OAuth token found');
+    if (hasLocalVideo) {
+      playbackDiagnostics.recordStep('06', 'skipped', 'Local video requires no OAuth token');
+    } else {
+      playbackDiagnostics.recordStep('06', 'running', 'Requesting OAuth access token...');
+      try {
+        console.log('[PLAYER_TRACE_06] Fetching Course Library OAuth token...');
+        const authRes = await getCourseLibraryAccessToken();
+        token = authRes?.token;
+        if (token) {
+          const sanitized = `present (len: ${token.length})`;
+          console.log(`[PLAYER_TRACE_06] Token acquired: ${sanitized}`);
+          playbackDiagnostics.recordStep('06', 'success', `Token valid (len: ${token.length})`);
+        } else {
+          console.warn('[PLAYER_TRACE_06] No token returned from getCourseLibraryAccessToken');
+          playbackDiagnostics.recordStep('06', 'failed', 'No OAuth token found');
+        }
+      } catch (tokenErr: any) {
+        const errMsg = tokenErr?.message || String(tokenErr);
+        console.warn(`[PLAYER_TRACE_06] Token acquisition warning: ${errMsg}`);
+        playbackDiagnostics.recordStep('06', 'failed', errMsg);
       }
-    } catch (tokenErr: any) {
-      const errMsg = tokenErr?.message || String(tokenErr);
-      console.warn(`[PLAYER_TRACE_06] Token acquisition warning: ${errMsg}`);
-      playbackDiagnostics.recordStep('06', 'failed', errMsg);
+
+    }
+    if (!mountedRef.current) return;
+    if (!hasLocalVideo && !token) {
+      setNativeError('Course Library access token unavailable. Reconnect the library and retry.');
+      setIsLaunchingNative(false);
+      setShowDiagOverlay(true);
+      return;
     }
 
     // Stage 07: Resolve video source
@@ -272,6 +300,11 @@ export default function VideoPlayerModal({
     }
 
     if (!mountedRef.current) return;
+    if (!resolved.isOffline && !token) {
+      playbackDiagnostics.recordError('Local video disappeared and streaming requires authorization. Retry playback.');
+      setIsLaunchingNative(false);
+      return;
+    }
     setSourceData(resolved);
 
     // Start background sequential prefetch
@@ -310,6 +343,8 @@ export default function VideoPlayerModal({
           console.warn('[VideoPlayerModal] Next topic resolve warning:', nextErr);
         }
       }
+
+      if (!mountedRef.current) return;
 
       try {
         console.log('[PLAYER_TRACE_08] Calling playNativeLecture with options:', {
@@ -395,17 +430,23 @@ export default function VideoPlayerModal({
     }
   }, [activeFileId, activeTopicId, activeLectureTitle, cachedItem?.currentTime, cachedItem?.duration, cachedItem?.localUri, currentCourse?.name, effectiveCourseId, nextFileId, nextTopic, nextTopicCache?.localUri, onClose, recordProgress, addVideoNote, startPrefetchQueue, switchToTopic]);
 
-  // Main lifecycle
+  // Keep changing progress, cache and callback values out of the launch lifecycle.
+  const initializeRef = useRef(initializePlayback);
+  useEffect(() => {
+    initializeRef.current = initializePlayback;
+  });
+
   useEffect(() => {
     if (!isOpen) return;
 
+    if (retryAttempt > 0) playbackDiagnostics.reset({ topicId: activeTopicId, fileId: activeFileId });
     const mountedRef = { current: true };
-    initializePlayback(mountedRef);
+    initializeRef.current(mountedRef);
 
     return () => {
       mountedRef.current = false;
     };
-  }, [isOpen, activeFileId, initializePlayback]);
+  }, [isOpen, activeFileId, activeTopicId, retryAttempt]);
 
   if (!isOpen) return null;
 
@@ -622,8 +663,7 @@ export default function VideoPlayerModal({
                         onClick={() => {
                           setNativeError(null);
                           setIsLaunchingNative(true);
-                          const mountedRef = { current: true };
-                          initializePlayback(mountedRef);
+                          setRetryAttempt((attempt) => attempt + 1);
                         }}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
                       >
@@ -952,8 +992,7 @@ export default function VideoPlayerModal({
             setShowDiagOverlay(false);
             setNativeError(null);
             setIsLaunchingNative(true);
-            const mountedRef = { current: true };
-            initializePlayback(mountedRef);
+            setRetryAttempt((attempt) => attempt + 1);
           }}
           onClose={() => {
             setShowDiagOverlay(false);
