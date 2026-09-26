@@ -55,6 +55,9 @@ export default function VideoPlayerModal({
   const [activeLectureTitle, setActiveLectureTitle] = useState(initialLectureTitle);
   const [activeFileId, setActiveFileId] = useState(initialFileId);
 
+  const isNative = Capacitor.isNativePlatform();
+  const isAndroid = isNative && Capacitor.getPlatform() === 'android';
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const [sourceData, setSourceData] = useState<ResolvedVideoSource | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -64,14 +67,19 @@ export default function VideoPlayerModal({
   const [noteInput, setNoteInput] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'notes' | 'slides'>('notes');
   const [resumePrompt, setResumePrompt] = useState<{ show: boolean; time: number }>({ show: false, time: 0 });
-  const [isLaunchingNative, setIsLaunchingNative] = useState<boolean>(false);
+  const [isLaunchingNative, setIsLaunchingNative] = useState<boolean>(isAndroid);
+  const [nativeError, setNativeError] = useState<string | null>(null);
 
   // Sync state when props change
   useEffect(() => {
     setActiveTopicId(initialTopicId);
     setActiveLectureTitle(initialLectureTitle);
     setActiveFileId(initialFileId);
-  }, [initialTopicId, initialLectureTitle, initialFileId]);
+    if (isAndroid) {
+      setIsLaunchingNative(true);
+      setNativeError(null);
+    }
+  }, [initialTopicId, initialLectureTitle, initialFileId, isAndroid]);
 
   const cachedItem = useVideoCacheStore((state) => state.cachedVideos[activeTopicId]);
   const notes = useVideoCacheStore((state) => state.videoNotes[activeTopicId] || []);
@@ -87,11 +95,13 @@ export default function VideoPlayerModal({
   const modules = useCurriculumStore((state) => state.modules);
   const courses = useCurriculumStore((state) => state.courses);
   const resources = useCurriculumStore((state) => state.resources);
-  const currentCourse = courses.find((c) => c.id === courseId);
+
+  const effectiveCourseId = courseId || topics.find((t) => t.id === activeTopicId)?.courseId || '';
+  const currentCourse = courses.find((c) => c.id === effectiveCourseId);
 
   // Find sequential topics in course across module boundaries
   const courseModules = modules
-    .filter((m) => m.courseId === courseId)
+    .filter((m) => m.courseId === effectiveCourseId)
     .sort((a, b) => a.order - b.order);
 
   const orderedCourseTopics = React.useMemo(() => {
@@ -103,22 +113,22 @@ export default function VideoPlayerModal({
       }
       return result;
     }
-    return topics.filter((t) => t.courseId === courseId).sort((a, b) => a.order - b.order);
-  }, [courseModules, topics, courseId]);
+    return topics.filter((t) => t.courseId === effectiveCourseId).sort((a, b) => a.order - b.order);
+  }, [courseModules, topics, effectiveCourseId]);
 
   const currentIndex = orderedCourseTopics.findIndex((t) => t.id === activeTopicId);
   const nextTopic = currentIndex !== -1 && currentIndex + 1 < orderedCourseTopics.length ? orderedCourseTopics[currentIndex + 1] : null;
   const nextTopicCache = nextTopic ? useVideoCacheStore.getState().cachedVideos[nextTopic.id] : null;
 
   // Next topic video resource
-  const nextTopicVideoRes = nextTopic ? resources.find((r) => r.topicId === nextTopic.id && r.type === 'video') : null;
+  const nextTopicVideoRes = nextTopic ? resources.find((r) => r.topicId === nextTopic.id && (r.type === 'video' || r.type?.toLowerCase() === 'video' || Boolean(r.driveFileId))) : null;
   const nextFileId = nextTopicVideoRes?.driveFileId || nextTopicVideoRes?.url?.match(/[\/=]([a-zA-Z0-9_-]{25,})/)?.[1];
 
   // Helper to switch to next lecture seamlessly
   const switchToTopic = useCallback((targetTopicId: string) => {
     const target = orderedCourseTopics.find((t) => t.id === targetTopicId);
     if (!target) return;
-    const res = resources.find((r) => r.topicId === target.id && r.type === 'video');
+    const res = resources.find((r) => r.topicId === target.id && (r.type === 'video' || r.type?.toLowerCase() === 'video' || Boolean(r.driveFileId)));
     const fId = res?.driveFileId || res?.url?.match(/[\/=]([a-zA-Z0-9_-]{25,})/)?.[1] || '';
 
     setActiveTopicId(target.id);
@@ -128,47 +138,73 @@ export default function VideoPlayerModal({
     setCurrentTime(0);
     setDuration(0);
     setResumePrompt({ show: false, time: 0 });
-  }, [orderedCourseTopics, resources]);
+    if (isAndroid) {
+      setIsLaunchingNative(true);
+      setNativeError(null);
+    }
+  }, [orderedCourseTopics, resources, isAndroid]);
 
-  // Main lifecycle: Launches Native Media3 Player on Android or loads source for Web
-  useEffect(() => {
-    if (!isOpen || !activeFileId) return;
+  // Main playback initialization
+  const initializePlayback = useCallback(async (mountedRef: { current: boolean }) => {
+    console.log('[VideoPlayerModal] 1. initializePlayback started:', {
+      activeFileId,
+      activeTopicId,
+      activeLectureTitle,
+      isAndroid,
+      isNativePlatform: Capacitor.isNativePlatform(),
+      platform: Capacitor.getPlatform()
+    });
 
-    let mounted = true;
+    const isNativeAndroid = await isMedia3ExoPlayerAvailable();
+    console.log('[VideoPlayerModal] 2. isMedia3ExoPlayerAvailable returned:', isNativeAndroid);
 
-    async function initializePlayback() {
-      const isNativeAndroid = await isMedia3ExoPlayerAvailable();
+    // Retrieve Course Library OAuth token
+    let token: string | undefined;
+    try {
+      console.log('[VideoPlayerModal] 3. Fetching Course Library OAuth token...');
+      const authRes = await getCourseLibraryAccessToken();
+      token = authRes?.token;
+      console.log('[VideoPlayerModal] 4. Token result:', token ? `Token present (length: ${token.length})` : 'No token found');
+    } catch (tokenErr) {
+      console.warn('[VideoPlayerModal] Token acquisition warning:', tokenErr);
+    }
 
-      // Retrieve Course Library OAuth token
-      let token: string | undefined;
+    console.log('[VideoPlayerModal] 5. Resolving video source for fileId:', activeFileId);
+    const resolved = await resolveVideoSource(activeFileId, cachedItem?.localUri, token);
+    console.log('[VideoPlayerModal] 6. Resolved video source:', {
+      isOffline: resolved.isOffline,
+      hasRawNativeUri: Boolean(resolved.rawNativeUri),
+      rawNativeUri: resolved.rawNativeUri,
+      hasDirectStreamUrl: Boolean(resolved.directStreamUrl),
+      directStreamUrl: resolved.directStreamUrl
+    });
+
+    if (!mountedRef.current) return;
+    setSourceData(resolved);
+
+    // Start background sequential prefetch
+    if (token) {
+      startPrefetchQueue(effectiveCourseId, activeTopicId, token);
+    }
+
+    // Check if resume position exists
+    const savedTime = cachedItem?.currentTime || 0;
+    if (savedTime > 10 && (!cachedItem?.duration || savedTime < cachedItem.duration - 15)) {
+      setResumePrompt({ show: true, time: savedTime });
+    }
+
+    // If running on Native Android -> Launch Media3 ExoPlayer Activity
+    if (isNativeAndroid) {
+      setIsLaunchingNative(true);
+      setNativeError(null);
       try {
-        const authRes = await getCourseLibraryAccessToken();
-        token = authRes?.token;
-      } catch {}
+        const videoUrlToPlay = resolved.isOffline && resolved.rawNativeUri
+          ? resolved.rawNativeUri
+          : (resolved.directStreamUrl || `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(activeFileId)}?alt=media`);
 
-      const resolved = await resolveVideoSource(activeFileId, cachedItem?.localUri, token);
-      if (!mounted) return;
-      setSourceData(resolved);
-
-      // Start background sequential prefetch
-      startPrefetchQueue(courseId, activeTopicId, token);
-
-      // Check if resume position exists
-      const savedTime = cachedItem?.currentTime || 0;
-      if (savedTime > 10 && (!cachedItem?.duration || savedTime < cachedItem.duration - 15)) {
-        setResumePrompt({ show: true, time: savedTime });
-      }
-
-      // If running on Native Android -> Launch Media3 ExoPlayer Activity
-      if (isNativeAndroid) {
-        setIsLaunchingNative(true);
-        try {
-          const videoUrlToPlay = resolved.isOffline && resolved.rawNativeUri
-            ? resolved.rawNativeUri
-            : (resolved.directStreamUrl || `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(activeFileId)}?alt=media`);
-
-          let nextTopicInfo: any = undefined;
-          if (nextTopic && nextFileId) {
+        let nextTopicInfo: any = undefined;
+        if (nextTopic && nextFileId) {
+          try {
             const nextResolved = await resolveVideoSource(nextFileId, nextTopicCache?.localUri, token);
             nextTopicInfo = {
               topicId: nextTopic.id,
@@ -178,59 +214,88 @@ export default function VideoPlayerModal({
                 ? nextResolved.rawNativeUri
                 : (nextResolved.directStreamUrl || `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(nextFileId)}?alt=media`)
             };
+          } catch (nextErr) {
+            console.warn('[VideoPlayerModal] Next topic resolve warning:', nextErr);
           }
+        }
 
-          const result = await NativeLecturePlayer.playLecture({
-            fileId: activeFileId,
-            videoUrl: videoUrlToPlay,
-            accessToken: token,
-            title: activeLectureTitle,
-            courseTitle: currentCourse?.name || 'Course',
-            topicId: activeTopicId,
-            currentTime: savedTime,
-            duration: cachedItem?.duration || 0,
-            isOffline: resolved.isOffline,
-            nextTopic: nextTopicInfo
-          });
+        console.log('[VideoPlayerModal] 7. Handoff to NativeLecturePlayer.playLecture:', {
+          fileId: activeFileId,
+          videoUrl: videoUrlToPlay,
+          title: activeLectureTitle,
+          courseTitle: currentCourse?.name || 'DegreeTrack',
+          topicId: activeTopicId,
+          currentTime: savedTime,
+          duration: cachedItem?.duration || 0,
+          isOffline: resolved.isOffline,
+          hasAccessToken: Boolean(token),
+          hasNextTopic: Boolean(nextTopicInfo)
+        });
 
-          if (!mounted) return;
+        const result = await NativeLecturePlayer.playLecture({
+          fileId: activeFileId,
+          videoUrl: videoUrlToPlay,
+          accessToken: token,
+          title: activeLectureTitle,
+          courseTitle: currentCourse?.name || 'DegreeTrack',
+          topicId: activeTopicId,
+          currentTime: savedTime,
+          duration: cachedItem?.duration || 0,
+          isOffline: resolved.isOffline,
+          nextTopic: nextTopicInfo
+        });
 
-          // Record progress from native player
-          if (result.currentTime && result.duration) {
-            recordProgress(activeTopicId, result.currentTime, result.duration);
-          }
+        console.log('[VideoPlayerModal] 8. Returned from NativeLecturePlayer.playLecture:', result);
 
-          // Import any timestamped notes recorded in the native player
-          if (result.notesAdded && Array.isArray(result.notesAdded)) {
-            for (const n of result.notesAdded) {
-              if (n.text && typeof n.timestampSeconds === 'number') {
-                addVideoNote(activeTopicId, n.timestampSeconds, n.text);
-              }
+        if (!mountedRef.current) return;
+
+        // Record progress from native player
+        if (result.currentTime && result.duration) {
+          recordProgress(activeTopicId, result.currentTime, result.duration);
+        }
+
+        // Import any timestamped notes recorded in the native player
+        if (result.notesAdded && Array.isArray(result.notesAdded)) {
+          for (const n of result.notesAdded) {
+            if (n.text && typeof n.timestampSeconds === 'number') {
+              addVideoNote(activeTopicId, n.timestampSeconds, n.text);
             }
           }
+        }
 
-          // If user tapped Next Lecture in the native player, transition seamlessly
-          if (result.nextRequested && result.nextTopicId) {
-            switchToTopic(result.nextTopicId);
-            return;
-          }
+        // If user tapped Next Lecture in the native player, transition seamlessly
+        if (result.nextRequested && result.nextTopicId) {
+          console.log('[VideoPlayerModal] Next lecture transition requested for:', result.nextTopicId);
+          switchToTopic(result.nextTopicId);
+          return;
+        }
 
-          // Otherwise close modal when native activity finishes
-          onClose();
-        } catch (err) {
-          console.warn('[LecturePlayer] Native player launch error, falling back to in-app view:', err);
-        } finally {
-          if (mounted) setIsLaunchingNative(false);
+        // Otherwise close modal when native activity finishes
+        console.log('[VideoPlayerModal] Native player finished, closing modal');
+        onClose();
+      } catch (err: any) {
+        console.error('[VideoPlayerModal] Native player launch error:', err);
+        if (mountedRef.current) {
+          setNativeError(err?.message || 'Failed to start native lecture player');
+          setIsLaunchingNative(false);
         }
       }
+    } else {
+      setIsLaunchingNative(false);
     }
+  }, [activeFileId, activeTopicId, activeLectureTitle, cachedItem?.currentTime, cachedItem?.duration, cachedItem?.localUri, currentCourse?.name, effectiveCourseId, isAndroid, nextFileId, nextTopic, nextTopicCache?.localUri, onClose, recordProgress, addVideoNote, startPrefetchQueue, switchToTopic]);
 
-    initializePlayback();
+  // Main lifecycle
+  useEffect(() => {
+    if (!isOpen || !activeFileId) return;
+
+    const mountedRef = { current: true };
+    initializePlayback(mountedRef);
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
     };
-  }, [isOpen, activeFileId, activeTopicId, activeLectureTitle, cachedItem?.localUri, courseId, currentCourse?.name, nextFileId, nextTopic, nextTopicCache?.localUri, onClose, recordProgress, addVideoNote, startPrefetchQueue, switchToTopic]);
+  }, [isOpen, activeFileId, initializePlayback]);
 
   if (!isOpen) return null;
 
@@ -397,11 +462,55 @@ export default function VideoPlayerModal({
           
           {/* Main Video Viewport */}
           <div className="flex-1 flex flex-col justify-between bg-black relative min-h-[340px] sm:min-h-[460px]">
-            {isLaunchingNative ? (
+            {isAndroid ? (
+              // Native Android Experience: NEVER render an iframe!
+              isLaunchingNative ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4 text-center">
+                  <Loader2 size={40} className="animate-spin text-blue-500" />
+                  <div className="space-y-1">
+                    <p className="text-base font-bold text-white">Launching Native Media3 ExoPlayer...</p>
+                    <p className="text-xs text-slate-400">Hardware accelerated 60fps streaming • {activeLectureTitle}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    <Cloud size={12} /> Google Drive Media3 Stream
+                  </span>
+                </div>
+              ) : nativeError ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4 text-center">
+                  <div className="p-3 bg-red-500/20 text-red-400 rounded-full">
+                    <X size={32} />
+                  </div>
+                  <div className="space-y-1 max-w-md">
+                    <p className="text-sm font-bold text-white">Could Not Launch Native Player</p>
+                    <p className="text-xs text-slate-400">{nativeError}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setNativeError(null);
+                      setIsLaunchingNative(true);
+                      const mountedRef = { current: true };
+                      initializePlayback(mountedRef);
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    Retry Native Player
+                  </button>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 gap-3 text-center">
+                  <p className="text-sm text-slate-400">Playback finished or closed.</p>
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              )
+            ) : isLaunchingNative ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 gap-3">
                 <Loader2 size={36} className="animate-spin text-blue-500" />
-                <p className="text-sm font-medium text-slate-300">Launching Native Media3 ExoPlayer...</p>
-                <span className="text-xs text-slate-500">Hardware accelerated 60fps streaming</span>
+                <p className="text-sm font-medium text-slate-300">Loading Lecture...</p>
               </div>
             ) : sourceData?.src ? (
               <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden group">
@@ -440,7 +549,7 @@ export default function VideoPlayerModal({
                 )}
               </div>
             ) : (
-              /* Cloud Direct Stream Iframe */
+              /* Cloud Direct Stream Iframe (Web Only) */
               <iframe
                 src={sourceData?.iframeUrl || `https://drive.google.com/file/d/${activeFileId}/preview`}
                 className="w-full h-full min-h-[340px] sm:min-h-[460px] border-0"
@@ -630,20 +739,43 @@ export default function VideoPlayerModal({
                       <p className="text-[11px] text-slate-400">Attached Google Drive PDF</p>
                     </div>
                   </div>
-                  <iframe
-                    src={slidesUrl.replace(/\/view.*$/, '/preview')}
-                    className="w-full h-64 rounded-xl border border-slate-700"
-                    title="Lecture Slides"
-                  />
+                  {!isAndroid ? (
+                    <iframe
+                      src={slidesUrl.replace(/\/view.*$/, '/preview')}
+                      className="w-full h-64 rounded-xl border border-slate-700"
+                      title="Lecture Slides"
+                    />
+                  ) : (
+                    <div className="p-4 bg-slate-800/40 rounded-xl border border-slate-700 text-center space-y-2">
+                      <FileText size={28} className="mx-auto text-blue-400" />
+                      <p className="text-xs text-slate-300">Tap below to view attached slides document.</p>
+                    </div>
+                  )}
                 </div>
-                <a
-                  href={slidesUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg transition-colors"
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isNative && isAndroid) {
+                      import('@capawesome/capacitor-android-intent-launcher')
+                        .then(({ AndroidIntentLauncher }) => {
+                          AndroidIntentLauncher.startActivity({
+                            action: 'android.intent.action.VIEW',
+                            dataUri: slidesUrl
+                          }).catch(() => {
+                            window.open(slidesUrl, '_system');
+                          });
+                        })
+                        .catch(() => {
+                          window.open(slidesUrl, '_system');
+                        });
+                    } else {
+                      window.open(slidesUrl, '_blank', 'noopener,noreferrer');
+                    }
+                  }}
+                  className="mt-3 flex items-center justify-center gap-1.5 py-2 px-3 text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg transition-colors w-full"
                 >
-                  <ExternalLink size={12} /> Open PDF in New Window
-                </a>
+                  <ExternalLink size={12} /> Open PDF Slides
+                </button>
               </div>
             )}
 

@@ -42,13 +42,21 @@ export const NativeLecturePlayer = registerPlugin<NativeLecturePlayerPlugin>('Le
  * Checks whether native Android Media3 ExoPlayer is available on the current device.
  */
 export async function isMedia3ExoPlayerAvailable(): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+  const isNative = Capacitor.isNativePlatform();
+  const platform = Capacitor.getPlatform();
+  console.log('[LecturePlayerBridge] Checking Media3 availability: isNative =', isNative, ', platform =', platform);
+
+  if (!isNative || platform !== 'android') {
+    console.log('[LecturePlayerBridge] Not native Android, returning false.');
     return false;
   }
+
   try {
     const res = await NativeLecturePlayer.isNativePlayerAvailable();
+    console.log('[LecturePlayerBridge] NativeLecturePlayer.isNativePlayerAvailable result:', res);
     return Boolean(res?.available);
-  } catch {
+  } catch (err) {
+    console.warn('[LecturePlayerBridge] NativeLecturePlayer.isNativePlayerAvailable threw exception:', err);
     return false;
   }
 }

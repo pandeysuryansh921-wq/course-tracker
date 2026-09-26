@@ -20,6 +20,7 @@ import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useVideoCacheStore } from '@/stores/useVideoCacheStore';
 import { downloadBase64File } from '@/lib/utils';
 import VideoPlayerModal from '@/components/study/VideoPlayerModal';
+import { Capacitor } from '@capacitor/core';
 
 interface ResourceLinkProps {
   resource: Resource;
@@ -27,9 +28,11 @@ interface ResourceLinkProps {
 }
 
 function extractDriveFileId(url: string): string {
+  if (!url) return '';
   const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
-                url.match(/id=([a-zA-Z0-9_-]+)/) ||
-                url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                url.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+                url.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+                url.match(/id=([a-zA-Z0-9_-]+)/);
   if (match) return match[1];
   if (/^[a-zA-Z0-9_-]{20,}$/.test(url)) return url;
   return url;
@@ -44,11 +47,19 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
     resource.topicId ? state.cachedVideos[resource.topicId] : undefined
   );
 
-  const isVideo = resource.type === 'video';
-  const isInline = ['pdf', 'photo'].includes(resource.type);
+  const isVideo = 
+    resource.type?.toLowerCase() === 'video' ||
+    Boolean(resource.mimeType?.startsWith('video/')) ||
+    Boolean(resource.driveFileId && (resource.mimeType?.startsWith('video/') || resource.role === 'PRIMARY')) ||
+    Boolean(resource.url?.match(/\.(mp4|mkv|webm|mov|m4v|avi)(\?.*)?$/i)) ||
+    Boolean(resource.title?.match(/\.(mp4|mkv|webm|mov|m4v|avi)$/i));
+
+  const isInline = !isVideo && ['pdf', 'photo'].includes(resource.type?.toLowerCase());
+
+  const driveFileId = resource.driveFileId || (isVideo ? extractDriveFileId(resource.url || '') : '');
 
   const getIcon = () => {
-    switch (resource.type) {
+    switch (resource.type?.toLowerCase()) {
       case 'video': return <Video className="w-5 h-5 text-red-500" />;
       case 'pdf': return <FileText className="w-4 h-4 text-orange-500" />;
       case 'textbook': return <BookOpen className="w-4 h-4 text-emerald-500" />;
@@ -59,17 +70,48 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
     }
   };
 
-  const handleOpen = () => {
+  const handleOpen = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    console.log('[ResourceLink] Clicked resource:', {
+      id: resource.id,
+      title: resource.title,
+      type: resource.type,
+      mimeType: resource.mimeType,
+      driveFileId,
+      url: resource.url,
+      isVideo,
+      isInline,
+      platform: Capacitor.getPlatform(),
+      isNative: Capacitor.isNativePlatform()
+    });
+
     if (isVideo) {
       setIsVideoModalOpen(true);
     } else if (isInline) {
       setIsViewing(!isViewing);
     } else {
-      window.open(resource.url, '_blank', 'noopener,noreferrer');
+      // Never navigate main Capacitor WebView to external URLs directly
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+        import('@capawesome/capacitor-android-intent-launcher')
+          .then(({ AndroidIntentLauncher }) => {
+            AndroidIntentLauncher.startActivity({
+              action: 'android.intent.action.VIEW',
+              dataUri: resource.url
+            }).catch(() => {
+              window.open(resource.url, '_system');
+            });
+          })
+          .catch(() => {
+            window.open(resource.url, '_system');
+          });
+      } else {
+        window.open(resource.url, '_blank', 'noopener,noreferrer');
+      }
     }
   };
-
-  const driveFileId = isVideo ? extractDriveFileId(resource.url) : '';
 
   return (
     <>
@@ -108,7 +150,12 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
             {isVideo && (
               <button
                 type="button"
-                onClick={() => setIsVideoModalOpen(true)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('[ResourceLink] Play button clicked:', { title: resource.title, driveFileId });
+                  setIsVideoModalOpen(true);
+                }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
               >
                 <Play size={12} fill="currentColor" /> Play

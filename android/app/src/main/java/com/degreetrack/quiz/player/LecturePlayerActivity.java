@@ -49,8 +49,10 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import android.util.Log;
 
 public class LecturePlayerActivity extends AppCompatActivity {
+    private static final String TAG = "LecturePlayerActivity";
 
     private PlayerView playerView;
     private ExoPlayer player;
@@ -129,6 +131,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d(TAG, "[DegreeTrack] LecturePlayerActivity onCreate launched");
 
         // Keep screen on & immersive
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -188,6 +191,15 @@ public class LecturePlayerActivity extends AppCompatActivity {
         nextTitle = intent.getStringExtra("nextTitle");
         nextVideoUrl = intent.getStringExtra("nextVideoUrl");
         nextFileId = intent.getStringExtra("nextFileId");
+
+        Log.d(TAG, "[DegreeTrack] Intent data parsed: fileId=" + fileId +
+                ", videoUrl=" + videoUrl +
+                ", hasAccessToken=" + (accessToken != null && !accessToken.trim().isEmpty()) +
+                ", lectureTitle=" + lectureTitle +
+                ", courseTitle=" + courseTitle +
+                ", topicId=" + topicId +
+                ", initialPos=" + initialPositionSec +
+                ", isOffline=" + isOffline);
     }
 
     private void initViews() {
@@ -391,10 +403,15 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
     private void initExoPlayer() {
         if (videoUrl == null || videoUrl.isEmpty()) {
+            Log.e(TAG, "[DegreeTrack] Cannot initialize ExoPlayer: videoUrl is null or empty!");
             Toast.makeText(this, "Invalid lecture video URL", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
+
+        Log.d(TAG, "[DegreeTrack] Initializing Media3 ExoPlayer: videoUrl=" + videoUrl + 
+                ", isOffline=" + isOffline + 
+                ", initialPosSec=" + initialPositionSec);
 
         // Tuned for multi-GB 1-3 hour lectures with fast 2.5s initial buffer
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
@@ -422,6 +439,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
         // Pre-buffer next lecture if available
         if (nextVideoUrl != null && !nextVideoUrl.isEmpty()) {
+            Log.d(TAG, "[DegreeTrack] Pre-buffering next lecture: " + nextTitle + " (" + nextVideoUrl + ")");
             MediaSource nextSource = buildMediaSource(nextVideoUrl, false);
             player.addMediaSource(nextSource);
         }
@@ -431,14 +449,17 @@ public class LecturePlayerActivity extends AppCompatActivity {
             public void onPlaybackStateChanged(int playbackState) {
                 switch (playbackState) {
                     case Player.STATE_BUFFERING:
+                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_BUFFERING");
                         bufferingProgress.setVisibility(View.VISIBLE);
                         break;
                     case Player.STATE_READY:
+                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_READY (duration=" + player.getDuration() + "ms)");
                         bufferingProgress.setVisibility(View.GONE);
                         updatePlayPauseIcon();
                         updateDurationDisplay();
                         break;
                     case Player.STATE_ENDED:
+                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_ENDED");
                         bufferingProgress.setVisibility(View.GONE);
                         updatePlayPauseIcon();
                         isCompleted = true;
@@ -446,12 +467,14 @@ public class LecturePlayerActivity extends AppCompatActivity {
                         showControls();
                         break;
                     case Player.STATE_IDLE:
+                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_IDLE");
                         break;
                 }
             }
 
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
+                Log.d(TAG, "[DegreeTrack] ExoPlayer onIsPlayingChanged: " + isPlaying);
                 updatePlayPauseIcon();
                 if (isPlaying) {
                     resetControlsTimer();
@@ -462,6 +485,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
+                Log.e(TAG, "[DegreeTrack] ExoPlayer onPlayerError: " + error.getMessage() + " (errorCode=" + error.errorCode + ")", error);
                 bufferingProgress.setVisibility(View.GONE);
                 Toast.makeText(LecturePlayerActivity.this, "Playback error: " + error.getMessage(), Toast.LENGTH_LONG).show();
             }
@@ -470,12 +494,14 @@ public class LecturePlayerActivity extends AppCompatActivity {
         // Resume position handling
         if (initialPositionSec > 10) {
             long resumeMs = (long) (initialPositionSec * 1000);
+            Log.d(TAG, "[DegreeTrack] Resuming playback from " + resumeMs + "ms (" + initialPositionSec + "s)");
             player.seekTo(resumeMs);
             tvResumeLabel.setText("Resumed from " + formatTime(resumeMs));
             resumeBanner.setVisibility(View.VISIBLE);
             handler.postDelayed(() -> resumeBanner.setVisibility(View.GONE), 6000);
         }
 
+        Log.d(TAG, "[DegreeTrack] Preparing and starting ExoPlayer");
         player.prepare();
         player.play();
 
@@ -486,11 +512,15 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
     private MediaSource buildMediaSource(String uriStr, boolean forceOffline) {
         Uri uri = Uri.parse(uriStr);
+        Log.d(TAG, "[DegreeTrack] buildMediaSource for: " + uriStr + ", forceOffline=" + forceOffline);
+
         if (forceOffline || uriStr.startsWith("file:") || uriStr.startsWith("/")) {
+            Log.d(TAG, "[DegreeTrack] Using local DefaultDataSource.Factory for offline file");
             DataSource.Factory localFactory = new DefaultDataSource.Factory(this);
             return new ProgressiveMediaSource.Factory(localFactory).createMediaSource(MediaItem.fromUri(uri));
         } else {
             // Google Drive Streaming with Bearer Auth and SimpleCache
+            Log.d(TAG, "[DegreeTrack] Using DefaultHttpDataSource.Factory with CacheDataSource (Bearer auth present: " + (accessToken != null && !accessToken.trim().isEmpty()) + ")");
             DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                     .setUserAgent("DegreeTrack-ExoPlayer")
                     .setConnectTimeoutMs(15000)
@@ -499,6 +529,8 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
             if (accessToken != null && !accessToken.trim().isEmpty()) {
                 httpFactory.setDefaultRequestProperties(Collections.singletonMap("Authorization", "Bearer " + accessToken.trim()));
+            } else {
+                Log.w(TAG, "[DegreeTrack] WARNING: No accessToken provided for streaming Google Drive file!");
             }
 
             CacheDataSource.Factory cacheFactory = new CacheDataSource.Factory()
@@ -639,6 +671,14 @@ public class LecturePlayerActivity extends AppCompatActivity {
     private void finishAndReturn() {
         double curSec = player != null ? (player.getCurrentPosition() / 1000.0) : initialPositionSec;
         double durSec = player != null && player.getDuration() > 0 ? (player.getDuration() / 1000.0) : initialDurationSec;
+
+        Log.d(TAG, "[DegreeTrack] finishAndReturn: topicId=" + topicId +
+                ", currentTime=" + curSec +
+                ", duration=" + durSec +
+                ", isCompleted=" + isCompleted +
+                ", watchedPercentage=" + maxWatchedPct +
+                ", notesCount=" + notesAdded.length() +
+                ", nextRequested=" + nextRequested);
 
         Intent resultIntent = new Intent();
         resultIntent.putExtra("topicId", topicId);
