@@ -20,6 +20,7 @@ import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useVideoCacheStore } from '@/stores/useVideoCacheStore';
 import { downloadBase64File } from '@/lib/utils';
 import VideoPlayerModal from '@/components/study/VideoPlayerModal';
+import { playbackDiagnostics } from '@/lib/player/playbackDiagnostics';
 import { Capacitor } from '@capacitor/core';
 
 interface ResourceLinkProps {
@@ -27,7 +28,7 @@ interface ResourceLinkProps {
   isEditMode?: boolean;
 }
 
-function extractDriveFileId(url: string): string {
+export function extractDriveFileId(url: string): string {
   if (!url) return '';
   const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
                 url.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
@@ -35,7 +36,7 @@ function extractDriveFileId(url: string): string {
                 url.match(/id=([a-zA-Z0-9_-]+)/);
   if (match) return match[1];
   if (/^[a-zA-Z0-9_-]{20,}$/.test(url)) return url;
-  return url;
+  return '';
 }
 
 export default function ResourceLink({ resource, isEditMode = false }: ResourceLinkProps) {
@@ -47,16 +48,16 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
     resource.topicId ? state.cachedVideos[resource.topicId] : undefined
   );
 
+  const driveFileId = resource.driveFileId || extractDriveFileId(resource.url || '');
+
   const isVideo = 
     resource.type?.toLowerCase() === 'video' ||
     Boolean(resource.mimeType?.startsWith('video/')) ||
-    Boolean(resource.driveFileId && (resource.mimeType?.startsWith('video/') || resource.role === 'PRIMARY')) ||
+    Boolean(driveFileId && (resource.mimeType?.startsWith('video/') || resource.role === 'PRIMARY' || resource.type === 'video')) ||
     Boolean(resource.url?.match(/\.(mp4|mkv|webm|mov|m4v|avi)(\?.*)?$/i)) ||
     Boolean(resource.title?.match(/\.(mp4|mkv|webm|mov|m4v|avi)$/i));
 
   const isInline = !isVideo && ['pdf', 'photo'].includes(resource.type?.toLowerCase());
-
-  const driveFileId = resource.driveFileId || (isVideo ? extractDriveFileId(resource.url || '') : '');
 
   const getIcon = () => {
     switch (resource.type?.toLowerCase()) {
@@ -75,42 +76,136 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
       e.preventDefault();
       e.stopPropagation();
     }
-    console.log('[ResourceLink] Clicked resource:', {
+
+    const isNative = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
+
+    // Stage 01: Resource clicked
+    console.log('[PLAYER_TRACE_01] Resource clicked:', {
       id: resource.id,
       title: resource.title,
       type: resource.type,
       mimeType: resource.mimeType,
+      role: resource.role,
       driveFileId,
       url: resource.url,
       isVideo,
       isInline,
-      platform: Capacitor.getPlatform(),
-      isNative: Capacitor.isNativePlatform()
+      platform,
+      isNative
     });
+
+    playbackDiagnostics.reset({
+      topicId: resource.topicId,
+      lectureTitle: resource.title,
+      fileId: driveFileId
+    });
+
+    playbackDiagnostics.setMeta({
+      platform,
+      isNative
+    });
+
+    playbackDiagnostics.recordStep(
+      '01',
+      'success',
+      `Title: "${resource.title}", Type: ${resource.type || 'unknown'}, isVideo: ${isVideo}`
+    );
+
+    // Stage 02: Native Android confirmation
+    if (isNative && platform === 'android') {
+      console.log('[PLAYER_TRACE_02] Native Android confirmed: platform=android, isNative=true');
+      playbackDiagnostics.recordStep('02', 'success', 'Native Android tablet environment');
+    } else {
+      console.log(`[PLAYER_TRACE_02] Platform check: platform=${platform}, isNative=${isNative}`);
+      playbackDiagnostics.recordStep('02', isNative ? 'success' : 'skipped', `Platform: ${platform} (isNative: ${isNative})`);
+    }
+
+    // Stage 03: Drive file ID check
+    if (driveFileId) {
+      console.log(`[PLAYER_TRACE_03] Drive file ID verified: ${driveFileId}`);
+      playbackDiagnostics.recordStep('03', 'success', `File ID: ${driveFileId}`);
+    } else if (isVideo) {
+      console.warn('[PLAYER_TRACE_03] Video resource has no detectable Drive file ID');
+      playbackDiagnostics.recordStep('03', 'failed', 'No Drive file ID found in resource');
+    }
 
     if (isVideo) {
       setIsVideoModalOpen(true);
     } else if (isInline) {
       setIsViewing(!isViewing);
     } else {
-      // Never navigate main Capacitor WebView to external URLs directly
-      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+      // Non-video, non-inline external link
+      // NEVER navigate main Capacitor WebView to external URLs directly
+      if (isNative && platform === 'android') {
         import('@capawesome/capacitor-android-intent-launcher')
           .then(({ AndroidIntentLauncher }) => {
             AndroidIntentLauncher.startActivity({
               action: 'android.intent.action.VIEW',
               dataUri: resource.url
-            }).catch(() => {
-              window.open(resource.url, '_system');
+            }).catch((err) => {
+              console.warn('[ResourceLink] External activity launch failed:', err);
+              // Do NOT navigate window.location
             });
           })
-          .catch(() => {
-            window.open(resource.url, '_system');
+          .catch((err) => {
+            console.warn('[ResourceLink] Could not load intent launcher plugin:', err);
           });
       } else {
         window.open(resource.url, '_blank', 'noopener,noreferrer');
       }
     }
+  };
+
+  const handlePlayClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const isNative = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
+
+    console.log('[PLAYER_TRACE_01] Play button clicked:', {
+      title: resource.title,
+      driveFileId,
+      mimeType: resource.mimeType,
+      role: resource.role,
+      isNative,
+      platform
+    });
+
+    playbackDiagnostics.reset({
+      topicId: resource.topicId,
+      lectureTitle: resource.title,
+      fileId: driveFileId
+    });
+
+    playbackDiagnostics.setMeta({
+      platform,
+      isNative
+    });
+
+    playbackDiagnostics.recordStep(
+      '01',
+      'success',
+      `Play button tapped: "${resource.title}"`
+    );
+
+    if (isNative && platform === 'android') {
+      console.log('[PLAYER_TRACE_02] Native Android confirmed: platform=android, isNative=true');
+      playbackDiagnostics.recordStep('02', 'success', 'Native Android tablet environment');
+    } else {
+      playbackDiagnostics.recordStep('02', isNative ? 'success' : 'skipped', `Platform: ${platform} (isNative: ${isNative})`);
+    }
+
+    if (driveFileId) {
+      console.log(`[PLAYER_TRACE_03] Drive file ID verified: ${driveFileId}`);
+      playbackDiagnostics.recordStep('03', 'success', `File ID: ${driveFileId}`);
+    } else {
+      console.warn('[PLAYER_TRACE_03] Drive file ID missing for Play action');
+      playbackDiagnostics.recordStep('03', 'failed', 'Missing Drive file ID');
+    }
+
+    setIsVideoModalOpen(true);
   };
 
   return (
@@ -150,12 +245,7 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
             {isVideo && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('[ResourceLink] Play button clicked:', { title: resource.title, driveFileId });
-                  setIsVideoModalOpen(true);
-                }}
+                onClick={handlePlayClick}
                 className="flex items-center gap-1 px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
               >
                 <Play size={12} fill="currentColor" /> Play
@@ -194,7 +284,7 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
           </div>
         )}
 
-        {/* Inline PDF / Photo Viewer */}
+        {/* Inline PDF / Photo Viewer (Protected from iframe on Android) */}
         {isInline && isViewing && (
           <div className="mt-2 mb-4 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
             <div className="flex justify-between items-center p-2 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
@@ -206,7 +296,29 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
             </div>
             <div className="p-2">
               {resource.type === 'pdf' && (
-                <iframe src={resource.url.replace(/\/view.*$/, '/preview')} className="w-full h-[500px] rounded-lg" title={resource.title} />
+                Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android' ? (
+                  <div className="p-6 text-center space-y-2 bg-slate-800/40 rounded-lg">
+                    <FileText className="w-8 h-8 mx-auto text-blue-400" />
+                    <p className="text-xs text-slate-300">Tap below to open document externally</p>
+                    <button
+                      onClick={() => {
+                        import('@capawesome/capacitor-android-intent-launcher')
+                          .then(({ AndroidIntentLauncher }) => {
+                            AndroidIntentLauncher.startActivity({
+                              action: 'android.intent.action.VIEW',
+                              dataUri: resource.url
+                            }).catch(() => {});
+                          })
+                          .catch(() => {});
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium"
+                    >
+                      Open PDF
+                    </button>
+                  </div>
+                ) : (
+                  <iframe src={resource.url.replace(/\/view.*$/, '/preview')} className="w-full h-[500px] rounded-lg" title={resource.title} />
+                )
               )}
               {resource.type === 'photo' && (
                 <img src={resource.url} alt={resource.title} className="max-w-full rounded-lg mx-auto" />
@@ -216,7 +328,7 @@ export default function ResourceLink({ resource, isEditMode = false }: ResourceL
         )}
       </div>
 
-      {/* Video Player Modal with Smart Rolling Cache */}
+      {/* Video Player Modal with Smart Rolling Cache & Diagnostics */}
       {isVideo && (
         <VideoPlayerModal
           isOpen={isVideoModalOpen}

@@ -1,20 +1,22 @@
 package com.degreetrack.quiz.player;
 
 import android.app.Activity;
-import android.content.DialogInterface;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
@@ -31,6 +33,7 @@ import androidx.media3.common.Player;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.cache.CacheDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -49,10 +52,9 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
-import android.util.Log;
 
 public class LecturePlayerActivity extends AppCompatActivity {
-    private static final String TAG = "LecturePlayerActivity";
+    private static final String TAG = "DegreeTrackPlayer";
 
     private PlayerView playerView;
     private ExoPlayer player;
@@ -131,7 +133,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.d(TAG, "[DegreeTrack] LecturePlayerActivity onCreate launched");
+        Log.i(TAG, "[PLAYER_TRACE_11] LecturePlayerActivity.onCreate() entered");
 
         // Keep screen on & immersive
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -169,7 +171,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        // Playback continues completely uninterrupted across portrait <-> landscape!
         setImmersiveMode();
     }
 
@@ -192,14 +193,20 @@ public class LecturePlayerActivity extends AppCompatActivity {
         nextVideoUrl = intent.getStringExtra("nextVideoUrl");
         nextFileId = intent.getStringExtra("nextFileId");
 
-        Log.d(TAG, "[DegreeTrack] Intent data parsed: fileId=" + fileId +
-                ", videoUrl=" + videoUrl +
-                ", hasAccessToken=" + (accessToken != null && !accessToken.trim().isEmpty()) +
-                ", lectureTitle=" + lectureTitle +
-                ", courseTitle=" + courseTitle +
+        int tokenLength = (accessToken != null) ? accessToken.trim().length() : 0;
+        String tokenPrefix = (tokenLength > 6) ? accessToken.trim().substring(0, 6) + "..." : "none";
+
+        Log.i(TAG, "[PLAYER_TRACE_11] Intent data parsed: " +
+                "fileId=" + fileId +
+                ", title=" + lectureTitle +
+                ", course=" + courseTitle +
                 ", topicId=" + topicId +
-                ", initialPos=" + initialPositionSec +
-                ", isOffline=" + isOffline);
+                ", initialPosSec=" + initialPositionSec +
+                ", isOffline=" + isOffline +
+                ", hasToken=" + (tokenLength > 0) +
+                ", tokenLength=" + tokenLength +
+                ", tokenPrefix=" + tokenPrefix +
+                ", videoUrl=" + videoUrl);
     }
 
     private void initViews() {
@@ -303,7 +310,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
-        // Toggle controls overlay on tap
         controlsOverlay.setOnClickListener(v -> {
             if (topBar.getVisibility() == View.VISIBLE) {
                 hideControls();
@@ -326,7 +332,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
             }
         });
 
-        // 10s Rewind
         btnRewind.setOnClickListener(v -> {
             if (player != null) {
                 long newPos = Math.max(0, player.getCurrentPosition() - 10000);
@@ -335,7 +340,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
             }
         });
 
-        // 10s Fast-Forward
         btnForward.setOnClickListener(v -> {
             if (player != null) {
                 long duration = player.getDuration();
@@ -349,7 +353,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
         btnAddNote.setOnClickListener(v -> showAddNoteDialog());
 
-        // Next Lecture Click
         btnNextLecture.setOnClickListener(v -> {
             if (nextTopicId != null && !nextTopicId.isEmpty()) {
                 nextRequested = true;
@@ -357,7 +360,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
             }
         });
 
-        // Scrubber
         seekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -390,7 +392,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
             }
         });
 
-        // Resume prompt handlers
         btnRestart.setOnClickListener(v -> {
             if (player != null) {
                 player.seekTo(0);
@@ -403,17 +404,13 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
     private void initExoPlayer() {
         if (videoUrl == null || videoUrl.isEmpty()) {
-            Log.e(TAG, "[DegreeTrack] Cannot initialize ExoPlayer: videoUrl is null or empty!");
-            Toast.makeText(this, "Invalid lecture video URL", Toast.LENGTH_LONG).show();
-            finish();
+            Log.e(TAG, "[PLAYER_TRACE_12] Cannot initialize ExoPlayer: videoUrl is null or empty!");
+            finishWithError("Invalid lecture video URL (videoUrl is null/empty)", -1, "INVALID_URL", -1, "videoUrl parameter missing");
             return;
         }
 
-        Log.d(TAG, "[DegreeTrack] Initializing Media3 ExoPlayer: videoUrl=" + videoUrl + 
-                ", isOffline=" + isOffline + 
-                ", initialPosSec=" + initialPositionSec);
+        Log.i(TAG, "[PLAYER_TRACE_12] Creating ExoPlayer with tuned buffer control (2.5s initial buffer, 25s min, 60s max)");
 
-        // Tuned for multi-GB 1-3 hour lectures with fast 2.5s initial buffer
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
                         25000, // min buffer 25s
@@ -439,7 +436,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
         // Pre-buffer next lecture if available
         if (nextVideoUrl != null && !nextVideoUrl.isEmpty()) {
-            Log.d(TAG, "[DegreeTrack] Pre-buffering next lecture: " + nextTitle + " (" + nextVideoUrl + ")");
+            Log.i(TAG, "[DegreeTrack] Pre-buffering next lecture source: " + nextTitle);
             MediaSource nextSource = buildMediaSource(nextVideoUrl, false);
             player.addMediaSource(nextSource);
         }
@@ -449,17 +446,17 @@ public class LecturePlayerActivity extends AppCompatActivity {
             public void onPlaybackStateChanged(int playbackState) {
                 switch (playbackState) {
                     case Player.STATE_BUFFERING:
-                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_BUFFERING");
+                        Log.i(TAG, "[PLAYER_TRACE_15] ExoPlayer STATE_BUFFERING");
                         bufferingProgress.setVisibility(View.VISIBLE);
                         break;
                     case Player.STATE_READY:
-                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_READY (duration=" + player.getDuration() + "ms)");
+                        Log.i(TAG, "[PLAYER_TRACE_16] ExoPlayer STATE_READY (duration=" + player.getDuration() + "ms)");
                         bufferingProgress.setVisibility(View.GONE);
                         updatePlayPauseIcon();
                         updateDurationDisplay();
                         break;
                     case Player.STATE_ENDED:
-                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_ENDED");
+                        Log.i(TAG, "[DegreeTrack] ExoPlayer STATE_ENDED");
                         bufferingProgress.setVisibility(View.GONE);
                         updatePlayPauseIcon();
                         isCompleted = true;
@@ -467,70 +464,110 @@ public class LecturePlayerActivity extends AppCompatActivity {
                         showControls();
                         break;
                     case Player.STATE_IDLE:
-                        Log.d(TAG, "[DegreeTrack] ExoPlayer STATE_IDLE");
+                        Log.i(TAG, "[DegreeTrack] ExoPlayer STATE_IDLE");
                         break;
                 }
             }
 
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
-                Log.d(TAG, "[DegreeTrack] ExoPlayer onIsPlayingChanged: " + isPlaying);
-                updatePlayPauseIcon();
                 if (isPlaying) {
+                    Log.i(TAG, "[PLAYER_TRACE_17] ExoPlayer isPlaying=true (Playback started!)");
                     resetControlsTimer();
                 } else {
+                    Log.i(TAG, "[DegreeTrack] ExoPlayer isPlaying=false (paused or buffering)");
                     showControls();
                 }
+                updatePlayPauseIcon();
             }
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
-                Log.e(TAG, "[DegreeTrack] ExoPlayer onPlayerError: " + error.getMessage() + " (errorCode=" + error.errorCode + ")", error);
                 bufferingProgress.setVisibility(View.GONE);
-                Toast.makeText(LecturePlayerActivity.this, "Playback error: " + error.getMessage(), Toast.LENGTH_LONG).show();
+
+                int errorCode = error.errorCode;
+                String errorCodeName = error.getErrorCodeName();
+                String message = error.getMessage();
+
+                // Detailed cause chain and HTTP inspection
+                StringBuilder causeChain = new StringBuilder();
+                Throwable curr = error.getCause();
+                int httpStatus = -1;
+                String httpResponseMsg = null;
+
+                while (curr != null) {
+                    if (causeChain.length() > 0) {
+                        causeChain.append(" -> ");
+                    }
+                    causeChain.append(curr.getClass().getSimpleName()).append(": ").append(curr.getMessage());
+
+                    if (curr instanceof HttpDataSource.InvalidResponseCodeException) {
+                        HttpDataSource.InvalidResponseCodeException httpEx = (HttpDataSource.InvalidResponseCodeException) curr;
+                        httpStatus = httpEx.responseCode;
+                        httpResponseMsg = httpEx.responseMessage;
+                    }
+
+                    curr = curr.getCause();
+                }
+
+                String causeChainStr = causeChain.toString();
+                if (causeChainStr.isEmpty()) causeChainStr = "None";
+
+                Log.e(TAG, "[PLAYER_TRACE_18] ExoPlayer onPlayerError: " +
+                        "code=" + errorCode + " (" + errorCodeName + ")" +
+                        ", httpStatus=" + httpStatus +
+                        ", httpMsg=" + httpResponseMsg +
+                        ", message=" + message +
+                        ", causeChain=" + causeChainStr, error);
+
+                showPlayerErrorDialog(errorCode, errorCodeName, httpStatus, httpResponseMsg, message, causeChainStr);
             }
         });
 
         // Resume position handling
         if (initialPositionSec > 10) {
             long resumeMs = (long) (initialPositionSec * 1000);
-            Log.d(TAG, "[DegreeTrack] Resuming playback from " + resumeMs + "ms (" + initialPositionSec + "s)");
+            Log.i(TAG, "[DegreeTrack] Seeking to resume position: " + resumeMs + "ms (" + initialPositionSec + "s)");
             player.seekTo(resumeMs);
             tvResumeLabel.setText("Resumed from " + formatTime(resumeMs));
             resumeBanner.setVisibility(View.VISIBLE);
             handler.postDelayed(() -> resumeBanner.setVisibility(View.GONE), 6000);
         }
 
-        Log.d(TAG, "[DegreeTrack] Preparing and starting ExoPlayer");
+        Log.i(TAG, "[PLAYER_TRACE_14] player.prepare() & player.play() invoked");
         player.prepare();
         player.play();
 
-        // Start progress polling
         handler.post(progressUpdateRunnable);
         resetControlsTimer();
     }
 
     private MediaSource buildMediaSource(String uriStr, boolean forceOffline) {
         Uri uri = Uri.parse(uriStr);
-        Log.d(TAG, "[DegreeTrack] buildMediaSource for: " + uriStr + ", forceOffline=" + forceOffline);
+        boolean isLocal = forceOffline || uriStr.startsWith("file:") || uriStr.startsWith("/");
+        int tokenLength = (accessToken != null) ? accessToken.trim().length() : 0;
 
-        if (forceOffline || uriStr.startsWith("file:") || uriStr.startsWith("/")) {
-            Log.d(TAG, "[DegreeTrack] Using local DefaultDataSource.Factory for offline file");
+        Log.i(TAG, "[PLAYER_TRACE_13] buildMediaSource: isLocal=" + isLocal +
+                ", hasBearerAuth=" + (tokenLength > 0) +
+                ", tokenLength=" + tokenLength +
+                ", uri=" + uriStr);
+
+        if (isLocal) {
+            Log.i(TAG, "[PLAYER_TRACE_13] Using DefaultDataSource.Factory for offline/local file");
             DataSource.Factory localFactory = new DefaultDataSource.Factory(this);
             return new ProgressiveMediaSource.Factory(localFactory).createMediaSource(MediaItem.fromUri(uri));
         } else {
-            // Google Drive Streaming with Bearer Auth and SimpleCache
-            Log.d(TAG, "[DegreeTrack] Using DefaultHttpDataSource.Factory with CacheDataSource (Bearer auth present: " + (accessToken != null && !accessToken.trim().isEmpty()) + ")");
+            Log.i(TAG, "[PLAYER_TRACE_13] Using DefaultHttpDataSource.Factory with CacheDataSource (Bearer auth present: " + (tokenLength > 0) + ")");
             DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                     .setUserAgent("DegreeTrack-ExoPlayer")
                     .setConnectTimeoutMs(15000)
                     .setReadTimeoutMs(30000)
                     .setAllowCrossProtocolRedirects(true);
 
-            if (accessToken != null && !accessToken.trim().isEmpty()) {
+            if (tokenLength > 0) {
                 httpFactory.setDefaultRequestProperties(Collections.singletonMap("Authorization", "Bearer " + accessToken.trim()));
             } else {
-                Log.w(TAG, "[DegreeTrack] WARNING: No accessToken provided for streaming Google Drive file!");
+                Log.w(TAG, "[PLAYER_TRACE_13] WARNING: No OAuth token provided for streaming Google Drive file!");
             }
 
             CacheDataSource.Factory cacheFactory = new CacheDataSource.Factory()
@@ -540,6 +577,61 @@ public class LecturePlayerActivity extends AppCompatActivity {
 
             return new ProgressiveMediaSource.Factory(cacheFactory).createMediaSource(MediaItem.fromUri(uri));
         }
+    }
+
+    private void showPlayerErrorDialog(int errorCode, String errorCodeName, int httpStatus, String httpResponseMsg, String message, String causeChain) {
+        StringBuilder report = new StringBuilder();
+        report.append("=== DEGREETRACK MEDIA3 ERROR ===\n");
+        report.append("Lecture: ").append(lectureTitle).append("\n");
+        report.append("File ID: ").append(fileId).append("\n");
+        report.append("Error Code: ").append(errorCode).append(" (").append(errorCodeName).append(")\n");
+        if (httpStatus > 0) {
+            report.append("HTTP Status: ").append(httpStatus).append(" ").append(httpResponseMsg != null ? httpResponseMsg : "").append("\n");
+        }
+        report.append("Message: ").append(message).append("\n");
+        report.append("Cause: ").append(causeChain).append("\n");
+        report.append("================================");
+
+        final String finalReport = report.toString();
+
+        new AlertDialog.Builder(this)
+                .setTitle("DegreeTrack Playback Diagnostic Error")
+                .setMessage(
+                        "ExoPlayer Error (PLAYER_TRACE_18)\n\n" +
+                        "• Code: " + errorCode + " (" + errorCodeName + ")\n" +
+                        (httpStatus > 0 ? ("• HTTP Status: " + httpStatus + " (" + (httpResponseMsg != null ? httpResponseMsg : "") + ")\n") : "") +
+                        "• Message: " + message + "\n\n" +
+                        "• Cause Chain:\n" + causeChain
+                )
+                .setPositiveButton("Copy Diagnostics", (dialog, which) -> {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    ClipData clip = ClipData.newPlainText("DegreeTrack Playback Error", finalReport);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(clip);
+                        Toast.makeText(LecturePlayerActivity.this, "Copied error report to clipboard ✓", Toast.LENGTH_SHORT).show();
+                    }
+                    finishWithError(message, errorCode, errorCodeName, httpStatus, causeChain);
+                })
+                .setNegativeButton("Close", (dialog, which) -> {
+                    finishWithError(message, errorCode, errorCodeName, httpStatus, causeChain);
+                })
+                .setCancelable(false)
+                .show();
+    }
+
+    private void finishWithError(String message, int errorCode, String errorCodeName, int httpStatus, String causeChain) {
+        Log.i(TAG, "[PLAYER_TRACE_19] finishWithError returning error result to plugin");
+        Intent resultIntent = new Intent();
+        resultIntent.putExtra("hasError", true);
+        resultIntent.putExtra("errorMessage", message);
+        resultIntent.putExtra("errorCode", errorCode);
+        resultIntent.putExtra("errorCodeName", errorCodeName);
+        resultIntent.putExtra("httpStatus", httpStatus);
+        resultIntent.putExtra("errorDetails", "Cause: " + causeChain);
+        resultIntent.putExtra("topicId", topicId);
+
+        setResult(Activity.RESULT_OK, resultIntent);
+        finish();
     }
 
     private void updatePlayPauseIcon() {
@@ -570,7 +662,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
             int progress = (int) ((current * 1000) / duration);
             seekbar.setProgress(progress);
 
-            // Watched percentage calculation
             int pct = (int) ((current * 100) / duration);
             if (pct > maxWatchedPct) {
                 maxWatchedPct = pct;
@@ -607,7 +698,6 @@ public class LecturePlayerActivity extends AppCompatActivity {
         final int noteTimestampSec = (int) (noteTimestampMs / 1000);
         final String formattedTime = formatTime(noteTimestampMs);
 
-        // Pause playback while taking note
         boolean wasPlaying = player != null && player.isPlaying();
         if (wasPlaying) {
             player.pause();
@@ -672,7 +762,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
         double curSec = player != null ? (player.getCurrentPosition() / 1000.0) : initialPositionSec;
         double durSec = player != null && player.getDuration() > 0 ? (player.getDuration() / 1000.0) : initialDurationSec;
 
-        Log.d(TAG, "[DegreeTrack] finishAndReturn: topicId=" + topicId +
+        Log.i(TAG, "[PLAYER_TRACE_19] finishAndReturn: topicId=" + topicId +
                 ", currentTime=" + curSec +
                 ", duration=" + durSec +
                 ", isCompleted=" + isCompleted +
@@ -681,6 +771,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
                 ", nextRequested=" + nextRequested);
 
         Intent resultIntent = new Intent();
+        resultIntent.putExtra("hasError", false);
         resultIntent.putExtra("topicId", topicId);
         resultIntent.putExtra("currentTime", curSec);
         resultIntent.putExtra("duration", durSec);
