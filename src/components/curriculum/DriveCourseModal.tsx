@@ -33,7 +33,8 @@ import { useAIStore } from '@/stores/useAIStore';
 import { 
   getCourseLibraryAccessToken, 
   getCourseLibraryUser, 
-  saveCourseLibraryUser 
+  saveCourseLibraryUser,
+  clearCourseLibraryToken 
 } from '@/lib/driveSync';
 import { useRouter } from 'next/navigation';
 
@@ -88,6 +89,7 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
     try {
       setIsAuthenticating(true);
       setError(null);
+      clearCourseLibraryToken();
       const res = await getCourseLibraryAccessToken(true);
       setDriveUser(res.user);
     } catch (err: any) {
@@ -132,10 +134,39 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
 
       const effectiveKey = apiKeyInput.trim() || process.env.NEXT_PUBLIC_GOOGLE_DRIVE_API_KEY;
 
-      const result = await fetchDeterministicCourseHierarchy(folderId, {
-        accessToken,
-        apiKey: effectiveKey,
-      });
+      let result: DriveScanResult;
+      try {
+        result = await fetchDeterministicCourseHierarchy(folderId, {
+          accessToken,
+          apiKey: effectiveKey,
+        });
+      } catch (scanErr: any) {
+        const isAuthProblem =
+          scanErr?.status === 401 ||
+          scanErr?.isAuthError ||
+          (scanErr?.message && (
+            scanErr.message.toLowerCase().includes('invalid authentication credentials') ||
+            scanErr.message.toLowerCase().includes('expected oauth 2 access token') ||
+            scanErr.message.toLowerCase().includes('unauthenticated') ||
+            scanErr.message.includes('401')
+          ));
+
+        if (activeTab === 'private' && isAuthProblem) {
+          console.warn('[Drive Scan] Authentication failed with current token (401). Triggering automatic re-authentication...');
+          clearCourseLibraryToken();
+          const freshAuth = await getCourseLibraryAccessToken(true);
+          accessToken = freshAuth.token;
+          if (freshAuth.user) {
+            setDriveUser(freshAuth.user);
+          }
+          result = await fetchDeterministicCourseHierarchy(folderId, {
+            accessToken,
+            apiKey: effectiveKey,
+          });
+        } else {
+          throw scanErr;
+        }
+      }
 
       if (result.rawFilesCount === 0 && result.modules.length === 0) {
         setError('No files or folders found in this Google Drive course folder.');
@@ -368,9 +399,25 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
         <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
           
           {error && (
-            <div className="p-3 text-xs bg-red-950/40 text-red-400 rounded-xl border border-red-800/80 flex items-start gap-2">
-              <AlertCircle size={15} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="p-3 text-xs bg-red-950/40 text-red-400 rounded-xl border border-red-800/80 flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              {(error.toLowerCase().includes('authentication') ||
+                error.toLowerCase().includes('token') ||
+                error.toLowerCase().includes('oauth') ||
+                error.toLowerCase().includes('401')) && (
+                <button
+                  type="button"
+                  onClick={handleConnectDrive}
+                  disabled={isAuthenticating}
+                  className="px-2.5 py-1 bg-red-800/80 hover:bg-red-700 text-white rounded-lg text-[11px] font-semibold shrink-0 transition-colors flex items-center gap-1"
+                >
+                  {isAuthenticating ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                  Re-authorize
+                </button>
+              )}
             </div>
           )}
 
@@ -431,7 +478,18 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
                       )}
                     </div>
                   </div>
-                  {!driveUser && (
+                  {driveUser ? (
+                    <button
+                      type="button"
+                      onClick={handleConnectDrive}
+                      disabled={isAuthenticating}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 hover:text-white text-xs font-medium rounded-lg disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                      title="Switch Google account or refresh authorization"
+                    >
+                      {isAuthenticating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      Switch / Re-auth
+                    </button>
+                  ) : (
                     <button
                       type="button"
                       onClick={handleConnectDrive}

@@ -153,7 +153,16 @@ async function fetchFolderContents(
     const res = await fetch(url, { headers: authHeader });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `Google Drive API error (status ${res.status})`);
+      const errorMsg = errData?.error?.message || `Google Drive API error (status ${res.status})`;
+      const err: any = new Error(errorMsg);
+      err.status = res.status;
+      err.isAuthError =
+        res.status === 401 ||
+        res.status === 403 ||
+        errorMsg.toLowerCase().includes('invalid authentication credentials') ||
+        errorMsg.toLowerCase().includes('expected oauth 2 access token') ||
+        errorMsg.toLowerCase().includes('unauthenticated');
+      throw err;
     }
 
     const data = await res.json();
@@ -196,11 +205,20 @@ export async function fetchDeterministicCourseHierarchy(
       `https://www.googleapis.com/drive/v3/files/${rootFolderId}?fields=id,name,mimeType${keyParam}`,
       { headers: authHeader }
     );
+    if (!metaRes.ok && (metaRes.status === 401 || metaRes.status === 403)) {
+      const errData = await metaRes.json().catch(() => ({}));
+      const errorMsg = errData?.error?.message || `Google Drive authentication error (status ${metaRes.status})`;
+      const err: any = new Error(errorMsg);
+      err.status = metaRes.status;
+      err.isAuthError = true;
+      throw err;
+    }
     if (metaRes.ok) {
       const meta = await metaRes.json();
       if (meta.name) courseName = meta.name;
     }
-  } catch (err) {
+  } catch (err: any) {
+    if (err.isAuthError) throw err;
     console.warn('[Drive Scanner] Could not fetch course root metadata:', err);
   }
 

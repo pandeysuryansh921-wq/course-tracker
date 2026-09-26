@@ -11,12 +11,15 @@ const BACKUP_FILE_NAME = 'degreetrack_backup.json';
 let currentInitializedScope: string | null = null;
 
 const initGoogleScope = async (scope: string) => {
-  if (currentInitializedScope === scope) return;
-  await GoogleSignIn.initialize({
-    clientId: GOOGLE_WEB_CLIENT_ID,
-    scopes: [scope],
-  });
-  currentInitializedScope = scope;
+  try {
+    await GoogleSignIn.initialize({
+      clientId: GOOGLE_WEB_CLIENT_ID,
+      scopes: [scope],
+    });
+    currentInitializedScope = scope;
+  } catch (initErr) {
+    console.warn('[GoogleSignIn] initialize warning:', initErr);
+  }
 };
 
 const initGoogle = async () => {
@@ -78,15 +81,27 @@ const getAccessToken = async () => {
 
 export const getBackupAccessToken = getAccessToken;
 
+// Clear cached Course Library OAuth tokens from localStorage
+export const clearCourseLibraryToken = () => {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('courseLibraryToken');
+  localStorage.removeItem('courseLibraryTokenExpiry');
+};
+
 // Get a valid access token for Course Library (drive.readonly)
 export const getCourseLibraryAccessToken = async (forcePrompt = false) => {
   try {
-    // Check cached token if fresh
-    const cachedToken = getCachedCourseLibraryToken();
-    if (cachedToken && !forcePrompt) {
-      return { token: cachedToken, user: getCourseLibraryUser() };
+    // Check cached token if fresh and not explicitly forced
+    if (!forcePrompt) {
+      const cachedToken = getCachedCourseLibraryToken();
+      if (cachedToken) {
+        return { token: cachedToken, user: getCourseLibraryUser() };
+      }
+    } else {
+      clearCourseLibraryToken();
     }
 
+    console.log('[driveSync] Acquiring fresh Course Library access token via GoogleSignIn.signIn()...');
     await initGoogleScope(SCOPE_COURSE_LIBRARY);
     const result = await GoogleSignIn.signIn();
 
@@ -105,14 +120,23 @@ export const getCachedCourseLibraryToken = (): string | null => {
   if (typeof window === 'undefined') return null;
   const token = localStorage.getItem('courseLibraryToken');
   const expiry = localStorage.getItem('courseLibraryTokenExpiry');
-  if (token && expiry) {
-    const expiresAt = Number(expiry);
-    // 5 minutes safety buffer
-    if (Date.now() < expiresAt - 300000) {
-      return token;
-    }
+  if (!token) return null;
+
+  if (!expiry) {
+    // Token without recorded expiry is untrusted/stale - evict to be safe
+    clearCourseLibraryToken();
+    return null;
   }
-  return token || null;
+
+  const expiresAt = Number(expiry);
+  // 5 minutes safety buffer before expiry
+  if (isNaN(expiresAt) || Date.now() >= expiresAt - 300000) {
+    console.warn('[driveSync] Course Library token has expired (or near expiration). Evicting cache.');
+    clearCourseLibraryToken();
+    return null;
+  }
+
+  return token;
 };
 
 export const getCourseLibraryUser = () => {
@@ -138,7 +162,7 @@ export const saveCourseLibraryUser = (user: any, token?: string) => {
   );
   if (token) {
     localStorage.setItem('courseLibraryToken', token);
-    // Typical Google access token lasts 3600 seconds
+    // Typical Google access token lasts 3600 seconds (1 hour). We store expiry timestamp.
     localStorage.setItem('courseLibraryTokenExpiry', String(Date.now() + 3600 * 1000));
   }
 };
@@ -146,8 +170,7 @@ export const saveCourseLibraryUser = (user: any, token?: string) => {
 export const disconnectCourseLibrary = async () => {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('courseLibraryUser');
-  localStorage.removeItem('courseLibraryToken');
-  localStorage.removeItem('courseLibraryTokenExpiry');
+  clearCourseLibraryToken();
 };
 
 // Check if a backup exists in appDataFolder
