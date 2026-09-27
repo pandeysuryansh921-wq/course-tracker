@@ -28,6 +28,7 @@ import {
   CourseDiffResult
 } from '@/lib/drive/scanner';
 import { DriveScanResult } from '@/types/video';
+import { CourseProgressionMode } from '@/types/curriculum';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { 
@@ -54,6 +55,7 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
   const [scanResult, setScanResult] = useState<DriveScanResult | null>(null);
   const [diffResult, setDiffResult] = useState<CourseDiffResult | null>(null);
   const [courseNameInput, setCourseNameInput] = useState('');
+  const [progressionMode, setProgressionMode] = useState<CourseProgressionMode>('ORDERED_LIBRARY');
   const [error, setError] = useState<string | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
@@ -247,14 +249,20 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
           courseTitle,
           `Google Drive course (${scanResult.totalLectures} lectures, ${scanResult.totalSlides} PDFs).`,
           '#3B82F6',
-          'Video'
+          'Video',
+          undefined,
+          progressionMode
         );
         targetCourseId = createdCourse.id;
-        await updateCourse(targetCourseId, { driveFolderId: scanResult.folderId });
+        await updateCourse(targetCourseId, {
+          driveFolderId: scanResult.folderId,
+          progressionMode
+        });
       } else {
         await updateCourse(targetCourseId, { 
           name: courseTitle, 
-          driveFolderId: scanResult.folderId 
+          driveFolderId: scanResult.folderId,
+          progressionMode
         });
       }
 
@@ -276,7 +284,8 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
         );
       }
 
-      // 3. Create Modules, Topics, and Resources
+      // 3. Create Modules, Topics, and Resources with canonical sequenceIndex
+      let globalSequenceCounter = 1;
       for (const mod of scanResult.modules) {
         const createdModule = await addModule(
           targetCourseId,
@@ -304,12 +313,15 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
           );
         }
 
-        // Topics (Section 6)
+        // Topics with global canonical sequenceIndex (Section 6)
         for (const top of mod.topics) {
           const createdTopic = await addTopic(
             moduleId,
             targetCourseId,
-            top.name
+            top.name,
+            undefined,
+            100,
+            globalSequenceCounter++
           );
           const topicId = createdTopic.id;
 
@@ -611,6 +623,25 @@ export default function DriveCourseModal({ isOpen, onClose, existingCourseId }: 
                   onChange={(e) => setCourseNameInput(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-medium text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Course Progression Mode Selector */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Course Progression Mode</label>
+                <select
+                  value={progressionMode}
+                  onChange={(e) => setProgressionMode(e.target.value as CourseProgressionMode)}
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="ORDERED_LIBRARY">Ordered Library (Default for Drive: recommended sequence, no prerequisite locks)</option>
+                  <option value="OPEN_LIBRARY">Open Library (Nonlinear collection: all lectures accessible freely)</option>
+                  <option value="STRUCTURED">Structured (Sequential prerequisite locking enforced)</option>
+                </select>
+                <span className="text-[11px] text-slate-400 block mt-1">
+                  {progressionMode === 'ORDERED_LIBRARY' && 'Preserves natural sequence for Next/Prefetch without locking future lectures.'}
+                  {progressionMode === 'OPEN_LIBRARY' && 'Completely flexible navigation. All lectures unlocked.'}
+                  {progressionMode === 'STRUCTURED' && 'Each module/topic must be completed before unlocking the next.'}
+                </span>
               </div>
 
               {/* Optional AI structuring */}

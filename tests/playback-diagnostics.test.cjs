@@ -88,6 +88,7 @@ test('a lecture without notes has stable store snapshots and launch dependencies
     '@/stores/useVideoCacheStore': { useVideoCacheStore: useStore(videoState) },
     '@/stores/useCurriculumStore': { useCurriculumStore: useStore(curriculumState) },
     '@/lib/drive/cacheManager': {}, '@/lib/driveSync': {},
+    '@/lib/curriculum/ordering': load('src/lib/curriculum/ordering.ts'),
     '@/lib/player/lecturePlayerBridge': {},
     '@/lib/player/playbackDiagnostics': { playbackDiagnostics: diagnostics() },
     './PlaybackDiagnosticOverlay': {}, '@capacitor/core': {},
@@ -102,3 +103,89 @@ test('a lecture without notes has stable store snapshots and launch dependencies
   assert.equal(firstDeps.length, nextDeps.length);
   firstDeps.forEach((value, index) => assert.equal(value, nextDeps[index], 'ordinary renders must not restart the launch effect'));
 });
+
+test('Issue 1: downloading file is NEVER classified as locally playable media', async () => {
+  const cacheManager = load('src/lib/drive/cacheManager.ts', {
+    '@capacitor/filesystem': { Filesystem: {}, Directory: {} },
+    '@capacitor/core': { Capacitor: { isNativePlatform: () => false, convertFileSrc: (u) => u } }
+  });
+
+  // A. Downloading cache item must resolve to cloud direct stream, NOT local
+  const downloadingItem = {
+    status: 'DOWNLOADING',
+    downloadProgress: 45,
+    fileId: 'file-123'
+  };
+
+  const resolved = await cacheManager.resolveVideoSource(
+    'file-123',
+    undefined,
+    'mock-token',
+    downloadingItem
+  );
+
+  assert.equal(resolved.isOffline, false, 'Downloading item must NOT be marked isOffline: true');
+  assert.equal(resolved.isIncomplete, true, 'Downloading item must be flagged isIncomplete: true');
+  assert.ok(resolved.directStreamUrl, 'Must return direct stream URL for cloud playback');
+  assert.ok(!resolved.rawNativeUri, 'Must NOT return rawNativeUri for downloading item');
+
+  // B. isVideoCachedLocally returns false for DOWNLOADING items
+  const isCached = await cacheManager.isVideoCachedLocally('file-123', undefined, downloadingItem);
+  assert.equal(isCached, false, 'isVideoCachedLocally must return false while downloading');
+
+  // C. DOWNLOAD_FAILED also returns false
+  const failedItem = { status: 'DOWNLOAD_FAILED', fileId: 'file-123' };
+  assert.equal(await cacheManager.isVideoCachedLocally('file-123', undefined, failedItem), false);
+});
+
+test('Issue 2: natural sorting sorts numbered files naturally without alphanumeric distortion', () => {
+  const { naturalCompare } = load('src/lib/drive/scanner.ts', {
+    '@/lib/ai/client': {}
+  });
+  const files = ['10 Muscles.mp4', '01 Intro.mp4', '2 Bones.mp4', '11 Joints.mp4'];
+  files.sort(naturalCompare);
+  assert.deepEqual(files, ['01 Intro.mp4', '2 Bones.mp4', '10 Muscles.mp4', '11 Joints.mp4']);
+});
+
+test('Issue 2: ORDER ≠ PREREQUISITE in course progression modes', () => {
+  const { getCourseProgressionMode } = load('src/lib/curriculum/ordering.ts');
+
+  // Authored course without Drive folder defaults to STRUCTURED
+  const authoredCourse = { id: 'c1', name: 'Robotics Degree' };
+  assert.equal(getCourseProgressionMode(authoredCourse), 'STRUCTURED');
+
+  // Drive course with driveFolderId defaults to ORDERED_LIBRARY
+  const driveCourse = { id: 'c2', name: 'Drive Anatomy', driveFolderId: 'folder-123' };
+  assert.equal(getCourseProgressionMode(driveCourse), 'ORDERED_LIBRARY');
+
+  // Explicit progressionMode takes precedence
+  const explicitOpen = { id: 'c3', name: 'Ref Library', driveFolderId: 'folder-123', progressionMode: 'OPEN_LIBRARY' };
+  assert.equal(getCourseProgressionMode(explicitOpen), 'OPEN_LIBRARY');
+});
+
+test('Issue 2: canonical topic sequence is consistent for UI, navigation, and prefetch', () => {
+  const { getCanonicalOrderedTopics, getCanonicalNextTopic, getCanonicalPreviousTopic } = load('src/lib/curriculum/ordering.ts');
+
+  const topics = [
+    { id: 't2', courseId: 'c1', moduleId: 'm1', name: 'Joints', order: 2, sequenceIndex: 2 },
+    { id: 't1', courseId: 'c1', moduleId: 'm1', name: 'Bones', order: 1, sequenceIndex: 1 },
+    { id: 't3', courseId: 'c1', moduleId: 'm2', name: 'Muscles', order: 1, sequenceIndex: 3 }
+  ];
+  const modules = [
+    { id: 'm1', courseId: 'c1', name: 'Module 1', order: 1 },
+    { id: 'm2', courseId: 'c1', name: 'Module 2', order: 2 }
+  ];
+
+  const ordered = getCanonicalOrderedTopics('c1', topics, modules);
+  assert.equal(ordered.length, 3);
+  assert.equal(ordered[0].id, 't1');
+  assert.equal(ordered[1].id, 't2');
+  assert.equal(ordered[2].id, 't3');
+
+  const next = getCanonicalNextTopic('t1', 'c1', topics, modules);
+  assert.equal(next?.id, 't2');
+
+  const prev = getCanonicalPreviousTopic('t3', 'c1', topics, modules);
+  assert.equal(prev?.id, 't2');
+});
+

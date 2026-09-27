@@ -15,6 +15,7 @@ import { ArrowLeft, Plus, Edit2, CheckCircle2, Loader2, FileText, Download, Tras
 import * as Icons from 'lucide-react';
 import { Suspense } from 'react';
 import { downloadBase64File } from '@/lib/utils';
+import { getCourseProgressionMode } from '@/lib/curriculum/ordering';
 
 function CourseDetailsContent() {
   const router = useRouter();
@@ -346,8 +347,12 @@ function CourseDetailsContent() {
       ) : (
         <div className="space-y-4">
           {modules.map((module, index) => {
+            const progressionMode = getCourseProgressionMode(course);
             let isModuleLocked = false;
-            if (!isEditMode && index > 0) {
+            // Invariant: ORDER ≠ PREREQUISITE.
+            // Only STRUCTURED authored courses enforce sequential completion locking.
+            // ORDERED_LIBRARY and OPEN_LIBRARY never lock later modules falsely.
+            if (progressionMode === 'STRUCTURED' && !isEditMode && index > 0) {
               const prevModule = modules[index - 1];
               const prevModuleTopics = topics.filter(t => t.moduleId === prevModule.id);
               if (prevModuleTopics.length > 0) {
@@ -363,6 +368,7 @@ function CourseDetailsContent() {
                 onToggle={() => toggleModule(module.id)}
                 isLocked={isModuleLocked}
                 isEditMode={isEditMode}
+                progressionMode={progressionMode}
                 onAddTopic={handleAddTopic}
               />
             );

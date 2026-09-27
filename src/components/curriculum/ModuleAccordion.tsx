@@ -1,6 +1,6 @@
 'use client';
 
-import { Module, Topic } from '@/types/curriculum';
+import { Module, Topic, CourseProgressionMode } from '@/types/curriculum';
 import { ChevronDown, ChevronRight, Plus, Trash2, ExternalLink, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -16,25 +16,38 @@ interface ModuleAccordionProps {
   onToggle: () => void;
   isLocked?: boolean;
   isEditMode?: boolean;
+  progressionMode?: CourseProgressionMode;
   onAddTopic?: (moduleId: string) => void;
 }
 
-export default function ModuleAccordion({ module, topics, isExpanded, onToggle, isLocked = false, isEditMode = false, onAddTopic }: ModuleAccordionProps) {
+export default function ModuleAccordion({
+  module,
+  topics,
+  isExpanded,
+  onToggle,
+  isLocked = false,
+  isEditMode = false,
+  progressionMode = 'STRUCTURED',
+  onAddTopic
+}: ModuleAccordionProps) {
   const deleteModule = useCurriculumStore(state => state.deleteModule);
   const allProjects = useCurriculumStore(state => state.projects);
   const projects = React.useMemo(() => allProjects.filter(p => p.moduleId === module.id).sort((a,b) => a.order - b.order), [allProjects, module.id]);
   
+  // Invariant: ORDER ≠ PREREQUISITE. In ORDERED_LIBRARY or OPEN_LIBRARY, modules are never falsely locked.
+  const effectiveIsLocked = progressionMode === 'STRUCTURED' ? isLocked : false;
+
   const completedTopics = topics.filter(t => t.status === 'completed').length;
   const progress = topics.length > 0 ? (completedTopics / topics.length) * 100 : 0;
 
   return (
-    <div className={`border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 mb-4 shadow-sm transition-all ${(isLocked && !isEditMode) ? 'opacity-50 grayscale select-none' : ''}`}>
+    <div className={`border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 mb-4 shadow-sm transition-all ${(effectiveIsLocked && !isEditMode) ? 'opacity-50 grayscale select-none' : ''}`}>
       <div 
-        className={`flex items-center p-4 transition-colors ${(isLocked && !isEditMode) ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-        onClick={() => { if (!(isLocked && !isEditMode)) onToggle(); }}
+        className={`flex items-center p-4 transition-colors ${(effectiveIsLocked && !isEditMode) ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+        onClick={() => { if (!(effectiveIsLocked && !isEditMode)) onToggle(); }}
       >
         <div className="text-slate-400 mr-3">
-          {(isLocked && !isEditMode) ? <Lock className="w-5 h-5 text-slate-400" /> : (isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />)}
+          {(effectiveIsLocked && !isEditMode) ? <Lock className="w-5 h-5 text-slate-400" /> : (isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />)}
         </div>
         
         <div className="flex-1">
@@ -146,9 +159,17 @@ export default function ModuleAccordion({ module, topics, isExpanded, onToggle, 
             {topics.length === 0 ? (
               <div className="p-6 text-center text-slate-500">No topics in this module yet.</div>
             ) : (
-              topics.sort((a,b) => a.order - b.order).map((topic, index, sortedTopics) => {
+              [...topics].sort((a,b) => {
+                if (typeof a.sequenceIndex === 'number' && typeof b.sequenceIndex === 'number') {
+                  return a.sequenceIndex - b.sequenceIndex;
+                }
+                return a.order - b.order;
+              }).map((topic, index, sortedTopics) => {
                 let isTopicLocked = false;
-                if (!isEditMode && index > 0) {
+                // Invariant: ORDER ≠ PREREQUISITE.
+                // Sequential locking is only applied in STRUCTURED curricula.
+                // In ORDERED_LIBRARY and OPEN_LIBRARY, topics are never locked simply because prior ones are incomplete.
+                if (progressionMode === 'STRUCTURED' && !isEditMode && index > 0) {
                   isTopicLocked = !sortedTopics[index - 1].isCompleted;
                 }
                 return <TopicRow key={topic.id} topic={topic} isLocked={isTopicLocked} isEditMode={isEditMode} />;

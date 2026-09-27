@@ -457,11 +457,33 @@ public class LecturePlayerActivity extends AppCompatActivity {
         trace("12");
         player.setMediaSource(mediaSource);
 
-        // Pre-buffer next lecture if available
+        // Pre-buffer next lecture if available and safe (never pre-buffer incomplete .part files)
         if (nextVideoUrl != null && !nextVideoUrl.isEmpty()) {
-            Log.i(TAG, "[DegreeTrack] Pre-buffering next lecture source: " + nextTitle);
-            MediaSource nextSource = buildMediaSource(nextVideoUrl, false);
-            player.addMediaSource(nextSource);
+            try {
+                boolean nextIsLocal = nextVideoUrl.startsWith("file:") || nextVideoUrl.startsWith("content:") || nextVideoUrl.startsWith("/");
+                boolean safeToPrebuffer = true;
+                if (nextVideoUrl.endsWith(".part")) {
+                    safeToPrebuffer = false;
+                } else if (nextIsLocal) {
+                    Uri nextUri = Uri.parse(nextVideoUrl);
+                    String nextPath = nextUri.getPath();
+                    if (nextPath != null) {
+                        java.io.File nf = new java.io.File(nextPath);
+                        if (!nf.exists() || nf.length() <= 0) {
+                            safeToPrebuffer = false;
+                        }
+                    }
+                }
+                if (safeToPrebuffer) {
+                    Log.i(TAG, "[DegreeTrack] Pre-buffering next lecture source: " + nextTitle);
+                    MediaSource nextSource = buildMediaSource(nextVideoUrl, false);
+                    player.addMediaSource(nextSource);
+                } else {
+                    Log.i(TAG, "[DegreeTrack] Skipping pre-buffer of next lecture (downloading or unverified): " + nextTitle);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "[DegreeTrack] Could not pre-buffer next lecture source: " + e.getMessage());
+            }
         }
 
         player.addListener(new Player.Listener() {
@@ -570,6 +592,14 @@ public class LecturePlayerActivity extends AppCompatActivity {
     }
 
     private MediaSource buildMediaSource(String uriStr, boolean forceOffline) {
+        if (uriStr == null || uriStr.isEmpty()) {
+            throw new IllegalArgumentException("Cannot build MediaSource from null or empty URI");
+        }
+        if (uriStr.endsWith(".part")) {
+            Log.e(TAG, "[DegreeTrack] Invariant violation: attempt to play incomplete .part file: " + uriStr);
+            throw new IllegalArgumentException("Cannot play incomplete .part download file: " + uriStr);
+        }
+
         Uri uri = Uri.parse(uriStr);
         boolean isLocal = forceOffline || uriStr.startsWith("file:") || uriStr.startsWith("content:") || uriStr.startsWith("/");
         int tokenLength = (accessToken != null) ? accessToken.trim().length() : 0;
@@ -580,7 +610,15 @@ public class LecturePlayerActivity extends AppCompatActivity {
                 ", uri=" + uriStr);
 
         if (isLocal) {
-            Log.i(TAG, "[PLAYER_TRACE_12] Using DefaultDataSource.Factory for offline/local file");
+            String path = uri.getPath();
+            if (path != null && (uriStr.startsWith("file:") || uriStr.startsWith("/"))) {
+                java.io.File localFile = new java.io.File(path);
+                if (!localFile.exists() || localFile.length() <= 0) {
+                    Log.e(TAG, "[DegreeTrack] Local file missing or 0 bytes: " + path);
+                    throw new IllegalArgumentException("Local video file is missing or empty: " + path);
+                }
+            }
+            Log.i(TAG, "[PLAYER_TRACE_12] Using DefaultDataSource.Factory for verified complete local file");
             DataSource.Factory localFactory = new DefaultDataSource.Factory(this);
             return new ProgressiveMediaSource.Factory(localFactory).createMediaSource(MediaItem.fromUri(uri));
         } else {

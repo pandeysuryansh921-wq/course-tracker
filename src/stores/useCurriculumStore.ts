@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { harvestResourceEffectiveness } from '@/lib/harvester';
 import type { 
   Course, 
+  CourseProgressionMode,
   Module, 
   Topic, 
   Resource, 
@@ -44,7 +45,7 @@ interface CurriculumActions {
   initialize: (force?: boolean) => Promise<void>;
   
   // Course actions
-  addCourse: (name: string, description: string, color?: string, icon?: string, gemLinks?: GemLink[]) => Promise<Course>;
+  addCourse: (name: string, description: string, color?: string, icon?: string, gemLinks?: GemLink[], progressionMode?: CourseProgressionMode) => Promise<Course>;
   updateCourse: (id: string, updates: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   
@@ -54,7 +55,7 @@ interface CurriculumActions {
   deleteModule: (id: string) => Promise<void>;
   
   // Topic actions
-  addTopic: (moduleId: string, courseId: string, name: string, quizUrl?: string, quizMaxScore?: number) => Promise<Topic>;
+  addTopic: (moduleId: string, courseId: string, name: string, quizUrl?: string, quizMaxScore?: number, sequenceIndex?: number) => Promise<Topic>;
   updateTopic: (id: string, updates: Partial<Topic>) => Promise<void>;
   deleteTopic: (id: string) => Promise<void>;
   updateTopicStatus: (id: string, status: TopicStatus) => Promise<void>;
@@ -145,7 +146,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     }
   },
 
-  addCourse: async (name, description, color = 'blue', icon = 'Book', gemLinks) => {
+  addCourse: async (name, description, color = 'blue', icon = 'Book', gemLinks, progressionMode) => {
     const id = generateId();
     const newCourse: Course = {
       id,
@@ -154,6 +155,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
       description,
       color,
       icon,
+      progressionMode: progressionMode || 'STRUCTURED',
       createdAt: new Date(),
       updatedAt: new Date(),
       gemLinks,
@@ -236,7 +238,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
     }));
   },
 
-  addTopic: async (moduleId, courseId, name, quizUrl, quizMaxScore = 100) => {
+  addTopic: async (moduleId, courseId, name, quizUrl, quizMaxScore = 100, sequenceIndex?: number) => {
     const topics = get().topics.filter(t => t.moduleId === moduleId);
     const id = generateId();
     const newTopic: Topic = {
@@ -255,6 +257,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
       assignments: [],
       externalLinks: [],
       order: topics.length,
+      sequenceIndex,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -264,7 +267,7 @@ export const useCurriculumStore = create<CurriculumState & CurriculumActions>((s
   },
 
   updateTopic: async (id, updates) => {
-    const templateKeys = ['name', 'description', 'studyPlan', 'scope', 'learningOutcomes', 'difficulty', 'learningLevel', 'estimatedHours', 'prerequisites', 'medicalApplications', 'completionCriteria', 'order', 'skills', 'quizUrl', 'quizMaxScore', 'assignments']; const progressKeys = ['status', 'isCompleted', 'isMastered', 'masteryScore', 'nextReviewDate', 'notes', 'quizScore', 'externalLinks']; const templateUpdates: any = {}; const progressUpdates: any = {}; for (const key of Object.keys(updates)) { if (templateKeys.includes(key)) templateUpdates[key] = (updates as any)[key]; if (progressKeys.includes(key)) progressUpdates[key] = (updates as any)[key]; } if (Object.keys(templateUpdates).length > 0) { templateUpdates.updatedAt = new Date(); await db.topicTemplates.update(id, templateUpdates); } if (Object.keys(progressUpdates).length > 0) { progressUpdates.updatedAt = new Date(); await db.topicProgress.update(id, progressUpdates); }
+    const templateKeys = ['name', 'description', 'studyPlan', 'scope', 'learningOutcomes', 'difficulty', 'learningLevel', 'estimatedHours', 'prerequisites', 'medicalApplications', 'completionCriteria', 'order', 'sequenceIndex', 'skills', 'quizUrl', 'quizMaxScore', 'assignments']; const progressKeys = ['status', 'isCompleted', 'isMastered', 'masteryScore', 'nextReviewDate', 'notes', 'quizScore', 'externalLinks']; const templateUpdates: any = {}; const progressUpdates: any = {}; for (const key of Object.keys(updates)) { if (templateKeys.includes(key)) templateUpdates[key] = (updates as any)[key]; if (progressKeys.includes(key)) progressUpdates[key] = (updates as any)[key]; } if (Object.keys(templateUpdates).length > 0) { templateUpdates.updatedAt = new Date(); await db.topicTemplates.update(id, templateUpdates); } if (Object.keys(progressUpdates).length > 0) { progressUpdates.updatedAt = new Date(); await db.topicProgress.update(id, progressUpdates); }
     set((state) => ({
       topics: state.topics.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date() } : t)
     }));

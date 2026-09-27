@@ -25,6 +25,7 @@ import {
 import { useVideoCacheStore } from '@/stores/useVideoCacheStore';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
 import { resolveVideoSource, isVideoCachedLocally, formatBytes, ResolvedVideoSource } from '@/lib/drive/cacheManager';
+import { getCanonicalOrderedTopics } from '@/lib/curriculum/ordering';
 import { getCourseLibraryAccessToken } from '@/lib/driveSync';
 import { playNativeLecture, isMedia3ExoPlayerAvailable } from '@/lib/player/lecturePlayerBridge';
 import { playbackDiagnostics, PlaybackDiagnosticsState } from '@/lib/player/playbackDiagnostics';
@@ -129,22 +130,10 @@ export default function VideoPlayerModal({
   const effectiveCourseId = courseId || topics.find((t) => t.id === activeTopicId)?.courseId || '';
   const currentCourse = courses.find((c) => c.id === effectiveCourseId);
 
-  // Sequential topics
-  const courseModules = React.useMemo(() => modules
-    .filter((m) => m.courseId === effectiveCourseId)
-    .sort((a, b) => a.order - b.order), [modules, effectiveCourseId]);
-
+  // Sequential topics using canonical ordering (single source of truth)
   const orderedCourseTopics = React.useMemo(() => {
-    if (courseModules.length > 0) {
-      const result: typeof topics = [];
-      for (const m of courseModules) {
-        const mTopics = topics.filter((t) => t.moduleId === m.id).sort((a, b) => a.order - b.order);
-        result.push(...mTopics);
-      }
-      return result;
-    }
-    return topics.filter((t) => t.courseId === effectiveCourseId).sort((a, b) => a.order - b.order);
-  }, [courseModules, topics, effectiveCourseId]);
+    return getCanonicalOrderedTopics(effectiveCourseId, topics, modules);
+  }, [effectiveCourseId, topics, modules]);
 
   const currentIndex = orderedCourseTopics.findIndex((t) => t.id === activeTopicId);
   const nextTopic = currentIndex !== -1 && currentIndex + 1 < orderedCourseTopics.length ? orderedCourseTopics[currentIndex + 1] : null;
@@ -230,7 +219,7 @@ export default function VideoPlayerModal({
       return;
     }
 
-    const hasLocalVideo = await isVideoCachedLocally(activeFileId, cachedItem?.localUri);
+    const hasLocalVideo = await isVideoCachedLocally(activeFileId, cachedItem?.localUri, cachedItem);
     if (!mountedRef.current) return;
 
     // Stage 06: Acquire Course Library OAuth token
@@ -260,7 +249,11 @@ export default function VideoPlayerModal({
     }
     if (!mountedRef.current) return;
     if (!hasLocalVideo && !token) {
-      setNativeError('Course Library access token unavailable. Reconnect the library and retry.');
+      const isDownloading = cachedItem?.status === 'DOWNLOADING' || cachedItem?.status === 'downloading';
+      const errMsg = isDownloading
+        ? 'Download incomplete. Connect to the internet to continue.'
+        : 'Course Library access token unavailable. Reconnect the library and retry.';
+      setNativeError(errMsg);
       setIsLaunchingNative(false);
       setShowDiagOverlay(true);
       return;
@@ -271,9 +264,10 @@ export default function VideoPlayerModal({
     console.log('[PLAYER_TRACE_07] Resolving video source for fileId:', activeFileId);
     let resolved: ResolvedVideoSource;
     try {
-      resolved = await resolveVideoSource(activeFileId, cachedItem?.localUri, token);
+      resolved = await resolveVideoSource(activeFileId, cachedItem?.localUri, token, cachedItem);
       console.log('[PLAYER_TRACE_07] Resolved video source:', {
         isOffline: resolved.isOffline,
+        isIncomplete: resolved.isIncomplete,
         hasRawNativeUri: Boolean(resolved.rawNativeUri),
         hasDirectStreamUrl: Boolean(resolved.directStreamUrl)
       });
@@ -301,8 +295,13 @@ export default function VideoPlayerModal({
 
     if (!mountedRef.current) return;
     if (!resolved.isOffline && !token) {
-      playbackDiagnostics.recordError('Local video disappeared and streaming requires authorization. Retry playback.');
+      const errMsg = resolved.isIncomplete
+        ? 'Download incomplete. Connect to the internet to continue.'
+        : 'Local video disappeared and streaming requires authorization. Retry playback.';
+      playbackDiagnostics.recordError(errMsg);
+      setNativeError(errMsg);
       setIsLaunchingNative(false);
+      setShowDiagOverlay(true);
       return;
     }
     setSourceData(resolved);
@@ -330,7 +329,7 @@ export default function VideoPlayerModal({
       let nextTopicInfo: any = undefined;
       if (nextTopic && nextFileId) {
         try {
-          const nextResolved = await resolveVideoSource(nextFileId, nextTopicCache?.localUri, token);
+          const nextResolved = await resolveVideoSource(nextFileId, nextTopicCache?.localUri, token, nextTopicCache);
           nextTopicInfo = {
             topicId: nextTopic.id,
             title: nextTopic.name,

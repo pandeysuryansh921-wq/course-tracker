@@ -67,6 +67,18 @@ export interface DriveScanResult {
   rawFilesCount: number;
 }
 
+export type CacheStatus =
+  | 'NOT_CACHED'
+  | 'DOWNLOADING'
+  | 'CACHED_COMPLETE'
+  | 'DOWNLOAD_FAILED'
+  | 'PINNED_COMPLETE'
+  // Backward-compatible legacy aliases
+  | 'idle'
+  | 'downloading'
+  | 'cached'
+  | 'error';
+
 export interface VideoCacheItem {
   topicId: string;
   fileId: string;
@@ -74,8 +86,11 @@ export interface VideoCacheItem {
   courseId: string;
   localUri?: string;
   fileSize?: number;
-  status: 'idle' | 'downloading' | 'cached' | 'error';
+  status: CacheStatus;
   downloadProgress?: number;
+  downloadedBytes?: number;
+  expectedBytes?: number;
+  completedAt?: string;
   watchedPercentage: number;
   isWatched: boolean;
   watchedAt?: string;

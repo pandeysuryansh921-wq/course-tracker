@@ -12,12 +12,44 @@ export interface ResolvedVideoSource {
   rawNativeUri?: string;
   directStreamUrl?: string;
   isOffline: boolean;
+  isIncomplete?: boolean;
   iframeUrl: string;
 }
 
 /**
+ * Sweeps and deletes any incomplete .part download files left over from crashes or interrupted downloads.
+ */
+export async function cleanupOrphanedPartFiles(): Promise<number> {
+  if (!Capacitor.isNativePlatform()) return 0;
+  try {
+    const list = await Filesystem.readdir({
+      path: VIDEO_FOLDER,
+      directory: Directory.Data
+    });
+    let cleaned = 0;
+    for (const f of list.files) {
+      const fileName = typeof f === 'string' ? f : f.name;
+      if (fileName && fileName.endsWith('.part')) {
+        try {
+          await Filesystem.deleteFile({
+            path: `${VIDEO_FOLDER}/${fileName}`,
+            directory: Directory.Data
+          });
+          cleaned++;
+          console.log(`[CacheManager] Cleaned orphaned partial download: ${fileName}`);
+        } catch {}
+      }
+    }
+    return cleaned;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Downloads a video file from Google Drive and caches it directly to the local device filesystem.
- * Streams natively using Filesystem.downloadFile to avoid loading multi-GB videos into JavaScript memory.
+ * Streams natively to a temporary .part file using Filesystem.downloadFile to avoid loading multi-GB
+ * videos into JavaScript memory. Only promotes to final .mp4 upon 100% verified completion.
  */
 export async function downloadVideoToDevice(
   fileId: string,
@@ -45,7 +77,8 @@ export async function downloadVideoToDevice(
       // Directory might already exist
     }
 
-    const filename = `${VIDEO_FOLDER}/${fileId}.mp4`;
+    const partFilename = `${VIDEO_FOLDER}/${fileId}.mp4.part`;
+    const finalFilename = `${VIDEO_FOLDER}/${fileId}.mp4`;
 
     // 2. Setup progress listener for native download streaming
     let progressListener: any = null;
@@ -65,34 +98,52 @@ export async function downloadVideoToDevice(
     }
 
     try {
-      // 3. Native streaming download (Direct socket to disk, zero JS memory overhead)
+      // 3. Native streaming download to temporary .part file
       await Filesystem.downloadFile({
         url,
         headers,
-        path: filename,
+        path: partFilename,
         directory: Directory.Data,
         progress: Boolean(onProgress)
       });
 
-      const uriResult = await Filesystem.getUri({
+      // 4. Verify downloaded partial file
+      const statResult = await Filesystem.stat({
         directory: Directory.Data,
-        path: filename
+        path: partFilename
       });
 
-      let size = 0;
-      try {
-        const statResult = await Filesystem.stat({
-          directory: Directory.Data,
-          path: filename
-        });
-        size = statResult.size || 0;
-      } catch {}
+      const size = statResult?.size || 0;
+      if (size <= 0) {
+        throw new Error(`Download verification failed: 0 bytes received for file ${fileId}`);
+      }
+
+      // 5. Atomic promotion: rename .part to final playable .mp4
+      await Filesystem.rename({
+        from: partFilename,
+        to: finalFilename,
+        directory: Directory.Data
+      });
+
+      const uriResult = await Filesystem.getUri({
+        directory: Directory.Data,
+        path: finalFilename
+      });
 
       onProgress?.(100);
       return {
         localUri: uriResult.uri,
         fileSize: size
       };
+    } catch (downloadErr) {
+      // Clean up partial file on download error or cancellation
+      try {
+        await Filesystem.deleteFile({
+          path: partFilename,
+          directory: Directory.Data
+        });
+      } catch {}
+      throw downloadErr;
     } finally {
       if (progressListener) {
         progressListener.remove().catch(() => {});
@@ -124,9 +175,25 @@ export async function downloadVideoToDevice(
 }
 
 /**
- * Checks if a video is physically present in the local device cache.
+ * Checks if a video is physically present AND confirmed complete in the local device cache.
+ * Invariant: INCOMPLETE FILE = NEVER PLAYABLE LOCAL MEDIA.
  */
-export async function isVideoCachedLocally(fileId: string, localUri?: string): Promise<boolean> {
+export async function isVideoCachedLocally(
+  fileId: string,
+  localUri?: string,
+  cacheItem?: { status?: string; isPinnedOffline?: boolean } | null
+): Promise<boolean> {
+  // If metadata indicates download is not complete, NEVER treat as cached
+  if (cacheItem) {
+    const isComplete =
+      cacheItem.status === 'CACHED_COMPLETE' ||
+      cacheItem.status === 'PINNED_COMPLETE' ||
+      cacheItem.status === 'cached';
+    if (!isComplete) {
+      return false;
+    }
+  }
+
   if (Capacitor.isNativePlatform()) {
     try {
       const filename = `${VIDEO_FOLDER}/${fileId}.mp4`;
@@ -151,11 +218,28 @@ export async function deleteCachedVideoFile(fileId: string): Promise<boolean> {
   try {
     if (Capacitor.isNativePlatform()) {
       const filename = `${VIDEO_FOLDER}/${fileId}.mp4`;
-      await Filesystem.deleteFile({
-        path: filename,
-        directory: Directory.Data
-      });
-      return true;
+      const partFilename = `${VIDEO_FOLDER}/${fileId}.mp4.part`;
+
+      // Try deleting final file
+      let deleted = false;
+      try {
+        await Filesystem.deleteFile({
+          path: filename,
+          directory: Directory.Data
+        });
+        deleted = true;
+      } catch {}
+
+      // Try deleting part file if it exists
+      try {
+        await Filesystem.deleteFile({
+          path: partFilename,
+          directory: Directory.Data
+        });
+        deleted = true;
+      } catch {}
+
+      return deleted;
     } else {
       if (webBlobCache.has(fileId)) {
         const item = webBlobCache.get(fileId);
@@ -173,26 +257,26 @@ export async function deleteCachedVideoFile(fileId: string): Promise<boolean> {
 
 /**
  * Gets the raw native file:// URI for a cached video (for native Media3/ExoPlayer direct playback).
+ * Returns null if the file is incomplete, missing, or still a .part file.
  */
-export async function getCachedVideoNativeUri(fileId: string): Promise<string | null> {
+export async function getCachedVideoNativeUri(
+  fileId: string,
+  cacheItem?: { status?: string } | null
+): Promise<string | null> {
+  const isCached = await isVideoCachedLocally(fileId, undefined, cacheItem);
+  if (!isCached) return null;
+
   if (!Capacitor.isNativePlatform()) {
     const webItem = webBlobCache.get(fileId);
     return webItem ? webItem.blobUrl : null;
   }
   try {
     const filename = `${VIDEO_FOLDER}/${fileId}.mp4`;
-    const stat = await Filesystem.stat({
+    const uriResult = await Filesystem.getUri({
       path: filename,
       directory: Directory.Data
     });
-    if (stat && stat.size > 0) {
-      const uriResult = await Filesystem.getUri({
-        path: filename,
-        directory: Directory.Data
-      });
-      return uriResult.uri;
-    }
-    return null;
+    return uriResult.uri;
   } catch {
     return null;
   }
@@ -200,16 +284,18 @@ export async function getCachedVideoNativeUri(fileId: string): Promise<string | 
 
 /**
  * Resolves the playable source for a video:
- * 1. If local cache exists, returns native device file URL and raw native URI (Offline ready).
- * 2. If not cached, returns Google Drive stream / preview embed URL (Direct streaming).
+ * 1. If fully cached (CACHED_COMPLETE / PINNED_COMPLETE), returns native device file URL and raw native URI (Offline ready).
+ * 2. If downloading, failed, or not cached, immediately returns authenticated Google Drive direct stream URL (Cloud stream).
+ * Invariant: Never passes an incomplete local file or .part file to Media3.
  */
 export async function resolveVideoSource(
   fileId: string,
   localUri?: string,
-  accessToken?: string
+  accessToken?: string,
+  cacheItem?: { status?: string; isPinnedOffline?: boolean } | null
 ): Promise<ResolvedVideoSource> {
   const iframeUrl = `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`;
-  const cached = await isVideoCachedLocally(fileId, localUri);
+  const cached = await isVideoCachedLocally(fileId, localUri, cacheItem);
 
   if (cached) {
     if (Capacitor.isNativePlatform()) {
@@ -223,6 +309,7 @@ export async function resolveVideoSource(
         src: playableSrc,
         rawNativeUri: uriResult.uri,
         isOffline: true,
+        isIncomplete: false,
         iframeUrl
       };
     } else {
@@ -232,21 +319,25 @@ export async function resolveVideoSource(
           src: webItem.blobUrl,
           rawNativeUri: webItem.blobUrl,
           isOffline: true,
+          isIncomplete: false,
           iframeUrl
         };
       }
     }
   }
 
-  // Not cached locally -> Direct Cloud Stream Mode
+  // Not fully cached locally -> Cloud Direct Stream Mode
   const directStreamUrl = accessToken
     ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`
     : undefined;
+
+  const isDownloading = cacheItem?.status === 'DOWNLOADING' || cacheItem?.status === 'downloading';
 
   return {
     src: directStreamUrl,
     directStreamUrl,
     isOffline: false,
+    isIncomplete: isDownloading,
     iframeUrl
   };
 }

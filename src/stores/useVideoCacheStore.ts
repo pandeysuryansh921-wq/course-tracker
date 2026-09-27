@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { VideoCacheItem, VideoNote, VideoCacheSettings } from '@/types/video';
-import { downloadVideoToDevice, deleteCachedVideoFile, isVideoCachedLocally, formatBytes } from '@/lib/drive/cacheManager';
+import { VideoCacheItem, VideoNote, VideoCacheSettings, CacheStatus } from '@/types/video';
+import { downloadVideoToDevice, deleteCachedVideoFile, isVideoCachedLocally, formatBytes, cleanupOrphanedPartFiles } from '@/lib/drive/cacheManager';
 import { useCurriculumStore } from '@/stores/useCurriculumStore';
+import { getCanonicalOrderedTopics } from '@/lib/curriculum/ordering';
 
 interface VideoCacheState {
   cachedVideos: Record<string, VideoCacheItem>;
@@ -64,12 +65,22 @@ export const useVideoCacheStore = create<VideoCacheState>()(
         set((state) => {
           const item = state.cachedVideos[topicId];
           if (!item) return state;
+          const nextPinned = !item.isPinnedOffline;
+          let nextStatus = item.status;
+          if (
+            item.status === 'CACHED_COMPLETE' ||
+            item.status === 'PINNED_COMPLETE' ||
+            item.status === 'cached'
+          ) {
+            nextStatus = nextPinned ? 'PINNED_COMPLETE' : 'CACHED_COMPLETE';
+          }
           return {
             cachedVideos: {
               ...state.cachedVideos,
               [topicId]: {
                 ...item,
-                isPinnedOffline: !item.isPinnedOffline
+                isPinnedOffline: nextPinned,
+                status: nextStatus
               }
             }
           };
@@ -85,7 +96,12 @@ export const useVideoCacheStore = create<VideoCacheState>()(
 
         // Find watched, non-pinned cached items sorted by watchedAt ascending (oldest watched first)
         const evictable = Object.values(cachedVideos)
-          .filter((item) => item.status === 'cached' && item.isWatched && !item.isPinnedOffline)
+          .filter(
+            (item) =>
+              (item.status === 'CACHED_COMPLETE' || item.status === 'cached') &&
+              item.isWatched &&
+              !item.isPinnedOffline
+          )
           .sort((a, b) => {
             const timeA = a.watchedAt ? new Date(a.watchedAt).getTime() : 0;
             const timeB = b.watchedAt ? new Date(b.watchedAt).getTime() : 0;
@@ -101,9 +117,10 @@ export const useVideoCacheStore = create<VideoCacheState>()(
               ...state.cachedVideos,
               [item.topicId]: {
                 ...item,
-                status: 'idle',
+                status: 'NOT_CACHED',
                 localUri: undefined,
                 downloadProgress: 0,
+                downloadedBytes: 0,
                 expiresAt: undefined
               }
             }
@@ -114,12 +131,12 @@ export const useVideoCacheStore = create<VideoCacheState>()(
 
       downloadVideo: async (topicId, fileId, title, courseId, accessToken) => {
         const existing = get().cachedVideos[topicId];
-        if (existing?.status === 'downloading') return false;
+        if (existing?.status === 'DOWNLOADING' || existing?.status === 'downloading') return false;
 
         // Check storage cap before starting
         await get().enforceCacheCap();
 
-        // Set state to downloading
+        // Set state to DOWNLOADING
         set((state) => ({
           cachedVideos: {
             ...state.cachedVideos,
@@ -128,8 +145,9 @@ export const useVideoCacheStore = create<VideoCacheState>()(
               fileId,
               title,
               courseId,
-              status: 'downloading',
+              status: 'DOWNLOADING',
               downloadProgress: 0,
+              downloadedBytes: 0,
               watchedPercentage: existing?.watchedPercentage || 0,
               isWatched: existing?.isWatched || false,
               watchedAt: existing?.watchedAt,
@@ -153,7 +171,11 @@ export const useVideoCacheStore = create<VideoCacheState>()(
                 return {
                   cachedVideos: {
                     ...state.cachedVideos,
-                    [topicId]: { ...item, downloadProgress: pct }
+                    [topicId]: {
+                      ...item,
+                      downloadProgress: pct,
+                      downloadedBytes: item.fileSize ? Math.round((pct / 100) * item.fileSize) : undefined
+                    }
                   }
                 };
               });
@@ -163,15 +185,19 @@ export const useVideoCacheStore = create<VideoCacheState>()(
           // Enforce cap after download
           await get().enforceCacheCap(fileSize);
 
+          const isPinned = get().cachedVideos[topicId]?.isPinnedOffline || false;
           set((state) => ({
             cachedVideos: {
               ...state.cachedVideos,
               [topicId]: {
                 ...state.cachedVideos[topicId],
-                status: 'cached',
+                status: isPinned ? 'PINNED_COMPLETE' : 'CACHED_COMPLETE',
                 localUri,
                 fileSize,
                 downloadProgress: 100,
+                downloadedBytes: fileSize,
+                expectedBytes: fileSize,
+                completedAt: new Date().toISOString(),
                 errorMsg: undefined
               }
             }
@@ -185,7 +211,9 @@ export const useVideoCacheStore = create<VideoCacheState>()(
               ...state.cachedVideos,
               [topicId]: {
                 ...state.cachedVideos[topicId],
-                status: 'error',
+                status: 'DOWNLOAD_FAILED',
+                downloadProgress: 0,
+                downloadedBytes: 0,
                 errorMsg: err.message || 'Download failed'
               }
             }
@@ -205,9 +233,10 @@ export const useVideoCacheStore = create<VideoCacheState>()(
             ...state.cachedVideos,
             [topicId]: {
               ...item,
-              status: 'idle',
+              status: 'NOT_CACHED',
               localUri: undefined,
               downloadProgress: 0,
+              downloadedBytes: 0,
               expiresAt: undefined
             }
           }
@@ -219,7 +248,12 @@ export const useVideoCacheStore = create<VideoCacheState>()(
       clearAllCache: async () => {
         const allItems = Object.values(get().cachedVideos);
         for (const item of allItems) {
-          if (item.status === 'cached' || item.localUri) {
+          if (
+            item.status === 'CACHED_COMPLETE' ||
+            item.status === 'PINNED_COMPLETE' ||
+            item.status === 'cached' ||
+            item.localUri
+          ) {
             await deleteCachedVideoFile(item.fileId);
           }
         }
@@ -229,9 +263,10 @@ export const useVideoCacheStore = create<VideoCacheState>()(
           Object.keys(updated).forEach((k) => {
             updated[k] = {
               ...updated[k],
-              status: 'idle',
+              status: 'NOT_CACHED',
               localUri: undefined,
               downloadProgress: 0,
+              downloadedBytes: 0,
               expiresAt: undefined
             };
           });
@@ -243,27 +278,13 @@ export const useVideoCacheStore = create<VideoCacheState>()(
         const settings = get().settings;
         if (settings.prefetchCount <= 0) return;
 
-        // Traverse modules and topics sequentially in curriculum order
+        // Traverse topics in canonical curriculum order (single source of truth)
         const curriculumStore = useCurriculumStore.getState();
-        const modules = curriculumStore.modules
-          .filter((m) => m.courseId === courseId)
-          .sort((a, b) => a.order - b.order);
-
-        const orderedTopics: typeof curriculumStore.topics = [];
-        if (modules.length > 0) {
-          for (const m of modules) {
-            const mTopics = curriculumStore.topics
-              .filter((t) => t.moduleId === m.id)
-              .sort((a, b) => a.order - b.order);
-            orderedTopics.push(...mTopics);
-          }
-        } else {
-          orderedTopics.push(
-            ...curriculumStore.topics
-              .filter((t) => t.courseId === courseId)
-              .sort((a, b) => a.order - b.order)
-          );
-        }
+        const orderedTopics = getCanonicalOrderedTopics(
+          courseId,
+          curriculumStore.topics,
+          curriculumStore.modules
+        );
 
         const currentIndex = orderedTopics.findIndex((t) => t.id === currentTopicId);
         if (currentIndex === -1) return;
@@ -280,9 +301,18 @@ export const useVideoCacheStore = create<VideoCacheState>()(
 
             if (fileId) {
               const currentCache = get().cachedVideos[nextTopic.id];
-              const isAlreadyCached = currentCache?.status === 'cached' || (await isVideoCachedLocally(fileId));
+              const isComplete =
+                currentCache?.status === 'CACHED_COMPLETE' ||
+                currentCache?.status === 'PINNED_COMPLETE' ||
+                currentCache?.status === 'cached';
+              const isDownloading =
+                currentCache?.status === 'DOWNLOADING' ||
+                currentCache?.status === 'downloading';
 
-              if (!isAlreadyCached && currentCache?.status !== 'downloading') {
+              const isPhysicallyCached =
+                isComplete && (await isVideoCachedLocally(fileId, undefined, currentCache));
+
+              if (!isPhysicallyCached && !isDownloading) {
                 console.log(`[Rolling Cache] Prefetching next sequential lecture in background: "${nextTopic.name}"`);
                 get().downloadVideo(nextTopic.id, fileId, nextTopic.name, courseId, accessToken).catch(() => {});
               }
@@ -384,7 +414,11 @@ export const useVideoCacheStore = create<VideoCacheState>()(
           // Pinned videos are never auto-purged
           if (item.isPinnedOffline) continue;
 
-          if (item.status === 'cached' && item.isWatched && item.expiresAt) {
+          if (
+            (item.status === 'CACHED_COMPLETE' || item.status === 'cached') &&
+            item.isWatched &&
+            item.expiresAt
+          ) {
             const expireTime = new Date(item.expiresAt).getTime();
             if (now >= expireTime) {
               console.log(
@@ -397,9 +431,10 @@ export const useVideoCacheStore = create<VideoCacheState>()(
                   ...state.cachedVideos,
                   [topicId]: {
                     ...item,
-                    status: 'idle',
+                    status: 'NOT_CACHED',
                     localUri: undefined,
                     downloadProgress: 0,
+                    downloadedBytes: 0,
                     expiresAt: undefined
                   }
                 }
@@ -415,7 +450,12 @@ export const useVideoCacheStore = create<VideoCacheState>()(
       getTotalStorageBytes: () => {
         const allItems = Object.values(get().cachedVideos);
         return allItems.reduce((acc, curr) => {
-          if (curr.status === 'cached' && curr.fileSize) {
+          if (
+            (curr.status === 'CACHED_COMPLETE' ||
+              curr.status === 'PINNED_COMPLETE' ||
+              curr.status === 'cached') &&
+            curr.fileSize
+          ) {
             return acc + curr.fileSize;
           }
           return acc;
@@ -432,7 +472,29 @@ export const useVideoCacheStore = create<VideoCacheState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // Run background auto-purge sweep on app startup
+          // 1. Crash recovery: Incomplete prefetch downloads must NEVER be classified as cached
+          const updated = { ...state.cachedVideos };
+          let hasInterrupted = false;
+          for (const [k, item] of Object.entries(updated)) {
+            if (item.status === 'DOWNLOADING' || item.status === 'downloading') {
+              updated[k] = {
+                ...item,
+                status: 'DOWNLOAD_FAILED',
+                downloadProgress: 0,
+                downloadedBytes: 0,
+                errorMsg: 'Download interrupted by app shutdown'
+              };
+              hasInterrupted = true;
+            }
+          }
+          if (hasInterrupted) {
+            useVideoCacheStore.setState({ cachedVideos: updated });
+          }
+
+          // 2. Clean up any orphaned .part files on disk
+          cleanupOrphanedPartFiles().catch(() => {});
+
+          // 3. Run background auto-purge sweep on app startup
           setTimeout(() => {
             state.runAutoPurgeSweep().catch(() => {});
           }, 2000);

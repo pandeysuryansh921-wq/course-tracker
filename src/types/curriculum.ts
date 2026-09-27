@@ -106,10 +106,13 @@ export interface LinkedNode {
   label: string;
 }
 
+export type CourseProgressionMode = 'STRUCTURED' | 'ORDERED_LIBRARY' | 'OPEN_LIBRARY';
+
 export interface Course {
   id: string;
   uri?: string; // Phase 1: Stable ecosystem URIs
   driveFolderId?: string; // Canonical Google Drive Folder ID
+  progressionMode?: CourseProgressionMode; // Progression rule: STRUCTURED, ORDERED_LIBRARY, OPEN_LIBRARY
   name: string;
   description: string;
   color: string;
@@ -220,6 +223,7 @@ export interface TopicTemplate {
   medicalApplications?: string[];
   completionCriteria?: any;
   order: number;
+  sequenceIndex?: number; // 1-based canonical sequence across course
   skills?: string[];
   quizUrl?: string;
   quizMaxScore?: number;
