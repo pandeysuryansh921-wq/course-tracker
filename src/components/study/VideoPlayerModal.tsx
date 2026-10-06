@@ -72,7 +72,6 @@ export default function VideoPlayerModal({
   const [sourceData, setSourceData] = useState<ResolvedVideoSource | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [noteInput, setNoteInput] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'notes' | 'slides'>('notes');
@@ -121,6 +120,8 @@ export default function VideoPlayerModal({
   const addVideoNote = useVideoCacheStore((state) => state.addVideoNote);
   const deleteVideoNote = useVideoCacheStore((state) => state.deleteVideoNote);
   const startPrefetchQueue = useVideoCacheStore((state) => state.startPrefetchQueue);
+  const playbackSpeed = useVideoCacheStore((state) => state.settings?.playbackSpeed || 1.0);
+  const setPlaybackSpeed = useVideoCacheStore((state) => state.setPlaybackSpeed);
 
   const topics = useCurriculumStore((state) => state.topics);
   const modules = useCurriculumStore((state) => state.modules);
@@ -366,6 +367,7 @@ export default function VideoPlayerModal({
           currentTime: savedTime,
           duration: cachedItem?.duration || 0,
           isOffline: resolved.isOffline,
+          playbackSpeed: useVideoCacheStore.getState().settings.playbackSpeed || 1.0,
           nextTopic: nextTopicInfo
         });
 
@@ -380,6 +382,11 @@ export default function VideoPlayerModal({
           setIsLaunchingNative(false);
           setShowDiagOverlay(true);
           return;
+        }
+
+        // Persist playback speed preference from native player
+        if (typeof result.playbackSpeed === 'number' && result.playbackSpeed > 0.1) {
+          setPlaybackSpeed(result.playbackSpeed);
         }
 
         // Record progress from native player
@@ -701,6 +708,11 @@ export default function VideoPlayerModal({
                     src={sourceData.src}
                     playsInline
                     autoPlay
+                    onLoadedMetadata={() => {
+                      if (videoRef.current) {
+                        videoRef.current.playbackRate = playbackSpeed;
+                      }
+                    }}
                     onTimeUpdate={handleTimeUpdate}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}

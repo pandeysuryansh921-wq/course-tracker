@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-function load(file, imports = {}) {
+function load(file, imports = {}, extraContext = {}) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React }
@@ -12,7 +12,7 @@ function load(file, imports = {}) {
   vm.runInNewContext(code, { exports, require: name => {
     if (!(name in imports)) throw new Error(`Unexpected import ${name}`);
     return imports[name];
-  }, console: { log() {}, warn() {}, error() {} }, Date, Set });
+  }, console: { log() {}, warn() {}, error() {} }, Date, Set, ...extraContext });
   return exports;
 }
 
@@ -76,7 +76,7 @@ test('a lecture without notes has stable store snapshots and launch dependencies
     useCallback: callback => callback,
     useMemo: callback => callback()
   };
-  const videoState = { cachedVideos: {}, videoNotes: {} };
+  const videoState = { cachedVideos: {}, videoNotes: {}, settings: { playbackSpeed: 1.0 } };
   const curriculumState = { topics: [], modules: [], courses: [], resources: [] };
   const useStore = state => selector => {
     const first = selector(state);
@@ -187,5 +187,134 @@ test('Issue 2: canonical topic sequence is consistent for UI, navigation, and pr
 
   const prev = getCanonicalPreviousTopic('t3', 'c1', topics, modules);
   assert.equal(prev?.id, 't2');
+});
+
+test('Issue 3: OAuth Course Library token memory cache & expiration lifecycle', () => {
+  const mockStorage = new Map();
+  const localStorageShim = {
+    getItem: (k) => mockStorage.get(k) || null,
+    setItem: (k, v) => mockStorage.set(k, String(v)),
+    removeItem: (k) => mockStorage.delete(k)
+  };
+
+  const driveSyncModule = load('src/lib/driveSync.ts', {
+    '@capawesome/capacitor-google-sign-in': { GoogleSignIn: {} },
+    '@capacitor/core': { Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' } },
+    '@/lib/player/lecturePlayerBridge': { NativeLecturePlayer: {} },
+    '@/lib/db': { db: {} },
+    'dexie-export-import': {}
+  }, {
+    window: {},
+    localStorage: localStorageShim
+  });
+
+  const { saveCourseLibraryUser, getCachedCourseLibraryToken, clearCourseLibraryToken } = driveSyncModule;
+
+  // 1. Initially no token
+  clearCourseLibraryToken();
+  assert.equal(getCachedCourseLibraryToken(), null);
+
+  // 2. Save active user session valid for 1 hour (3600s)
+  saveCourseLibraryUser({ email: 'student@example.com' }, 'ya29.test_active_token', 3600);
+
+  // 3. Immediately retrieved without prompt
+  assert.equal(getCachedCourseLibraryToken(), 'ya29.test_active_token');
+
+  // 4. Token near expiry (< 5 min remaining = 300s) is evicted to prevent mid-stream failure
+  saveCourseLibraryUser({ email: 'student@example.com' }, 'ya29.expiring_soon_token', 60);
+  assert.equal(getCachedCourseLibraryToken(), null, 'Near-expiry token must be evicted');
+
+  // 5. Explicit clear wipes cache
+  saveCourseLibraryUser({ email: 'student@example.com' }, 'ya29.valid_token_2', 3600);
+  assert.equal(getCachedCourseLibraryToken(), 'ya29.valid_token_2');
+  clearCourseLibraryToken();
+  assert.equal(getCachedCourseLibraryToken(), null);
+});
+
+test('Issue 3: Native Android silently refreshes expired token with 0 account chooser prompts', async () => {
+  let silentCalls = 0;
+  let interactiveSignInCalls = 0;
+
+  const mockStorage = new Map();
+  const localStorageShim = {
+    getItem: (k) => mockStorage.get(k) || null,
+    setItem: (k, v) => mockStorage.set(k, String(v)),
+    removeItem: (k) => mockStorage.delete(k)
+  };
+
+  const mockNativePlayer = {
+    getSilentAccessToken: async (opts) => {
+      silentCalls++;
+      assert.equal(opts.email, 'student@example.com');
+      return {
+        accessToken: 'ya29.silent_refreshed_token',
+        expiresAt: Date.now() + 3600 * 1000
+      };
+    }
+  };
+
+  const mockGoogleSignIn = {
+    initialize: async () => {},
+    signIn: async () => {
+      interactiveSignInCalls++;
+      return {
+        accessToken: 'ya29.interactive_token',
+        user: { email: 'student@example.com' }
+      };
+    }
+  };
+
+  const driveSyncModule = load('src/lib/driveSync.ts', {
+    '@capawesome/capacitor-google-sign-in': { GoogleSignIn: mockGoogleSignIn },
+    '@capacitor/core': { Capacitor: { isNativePlatform: () => true, getPlatform: () => 'android' } },
+    '@/lib/player/lecturePlayerBridge': { NativeLecturePlayer: mockNativePlayer },
+    '@/lib/db': { db: {} },
+    'dexie-export-import': {}
+  }, {
+    window: {},
+    localStorage: localStorageShim
+  });
+
+  const { saveCourseLibraryUser, getCourseLibraryAccessToken, clearCourseLibraryToken } = driveSyncModule;
+  clearCourseLibraryToken();
+
+  // Seed user with expired token (-10s)
+  saveCourseLibraryUser({ email: 'student@example.com' }, 'ya29.expired_token', -10);
+
+  // Call getCourseLibraryAccessToken()
+  const authResult = await getCourseLibraryAccessToken();
+
+  assert.equal(authResult.token, 'ya29.silent_refreshed_token');
+  assert.equal(silentCalls, 1, 'Silent native token refresh must be invoked');
+  assert.equal(interactiveSignInCalls, 0, 'Interactive GoogleSignIn.signIn must NEVER be called when silent refresh succeeds');
+});
+
+test('Issue 4: Playback speed preference persists across sessions and passes to native player', async () => {
+  let launchedSpeed = null;
+
+  const bridge = load('src/lib/player/lecturePlayerBridge.ts', {
+    '@capacitor/core': {
+      registerPlugin: () => ({
+        playLecture: async (opts) => {
+          launchedSpeed = opts.playbackSpeed;
+          return {
+            hasError: false,
+            playbackSpeed: 1.75 // User changed speed to 1.75x during playback
+          };
+        }
+      }),
+      Capacitor: {}
+    },
+    './playbackDiagnostics': { playbackDiagnostics: diagnostics() }
+  });
+
+  const result = await bridge.playNativeLecture({
+    fileId: 'video-123',
+    videoUrl: 'https://example.com/stream',
+    playbackSpeed: 2.0 // Stored speed 2.0x
+  });
+
+  assert.equal(launchedSpeed, 2.0, 'playNativeLecture must pass stored playbackSpeed to native activity');
+  assert.equal(result.playbackSpeed, 1.75, 'Result must pass back updated speed to be synced with store');
 });
 

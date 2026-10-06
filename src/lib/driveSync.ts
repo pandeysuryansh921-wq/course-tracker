@@ -1,4 +1,6 @@
 import { GoogleSignIn } from '@capawesome/capacitor-google-sign-in';
+import { Capacitor } from '@capacitor/core';
+import { NativeLecturePlayer } from '@/lib/player/lecturePlayerBridge';
 import { db } from '@/lib/db';
 import { exportDB, importInto } from 'dexie-export-import';
 
@@ -81,42 +83,34 @@ const getAccessToken = async () => {
 
 export const getBackupAccessToken = getAccessToken;
 
-// Clear cached Course Library OAuth tokens from localStorage
+// Memory cache for active Course Library session to prevent repeat prompts
+interface MemoryTokenSession {
+  token: string;
+  expiresAt: number;
+  user: any;
+}
+let memorySession: MemoryTokenSession | null = null;
+
+// Clear cached Course Library OAuth tokens from memory and localStorage
 export const clearCourseLibraryToken = () => {
+  memorySession = null;
   if (typeof window === 'undefined') return;
   localStorage.removeItem('courseLibraryToken');
   localStorage.removeItem('courseLibraryTokenExpiry');
 };
 
-// Get a valid access token for Course Library (drive.readonly)
-export const getCourseLibraryAccessToken = async (forcePrompt = false) => {
-  try {
-    // Check cached token if fresh and not explicitly forced
-    if (!forcePrompt) {
-      const cachedToken = getCachedCourseLibraryToken();
-      if (cachedToken) {
-        return { token: cachedToken, user: getCourseLibraryUser() };
-      }
-    } else {
-      clearCourseLibraryToken();
-    }
-
-    console.log('[driveSync] Acquiring fresh Course Library access token via GoogleSignIn.signIn()...');
-    await initGoogleScope(SCOPE_COURSE_LIBRARY);
-    const result = await GoogleSignIn.signIn();
-
-    if (!result.accessToken) {
-      throw new Error("No access token returned from Google Sign-In for Course Library");
-    }
-
-    saveCourseLibraryUser(result, result.accessToken);
-    return { token: result.accessToken, user: result };
-  } catch (err: any) {
-    throw logAuthError('Course Library', err);
-  }
-};
-
 export const getCachedCourseLibraryToken = (): string | null => {
+  const now = Date.now();
+  // 1. Check in-memory session first (instant, synchronous)
+  if (memorySession && memorySession.token) {
+    if (now < memorySession.expiresAt - 300000) {
+      return memorySession.token;
+    }
+    // Expired memory session
+    memorySession = null;
+  }
+
+  // 2. Check localStorage
   if (typeof window === 'undefined') return null;
   const token = localStorage.getItem('courseLibraryToken');
   const expiry = localStorage.getItem('courseLibraryTokenExpiry');
@@ -130,16 +124,19 @@ export const getCachedCourseLibraryToken = (): string | null => {
 
   const expiresAt = Number(expiry);
   // 5 minutes safety buffer before expiry
-  if (isNaN(expiresAt) || Date.now() >= expiresAt - 300000) {
+  if (isNaN(expiresAt) || now >= expiresAt - 300000) {
     console.warn('[driveSync] Course Library token has expired (or near expiration). Evicting cache.');
     clearCourseLibraryToken();
     return null;
   }
 
+  // Restore memorySession from valid localStorage
+  memorySession = { token, expiresAt, user: getCourseLibraryUser() };
   return token;
 };
 
 export const getCourseLibraryUser = () => {
+  if (memorySession?.user) return memorySession.user;
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem('courseLibraryUser');
@@ -149,28 +146,90 @@ export const getCourseLibraryUser = () => {
   }
 };
 
-export const saveCourseLibraryUser = (user: any, token?: string) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(
-    'courseLibraryUser',
-    JSON.stringify({
-      name: user.displayName || user.name || 'Google User',
-      email: user.email,
-      imageUrl: user.imageUrl,
-      connectedAt: new Date().toISOString(),
-    })
-  );
+export const saveCourseLibraryUser = (user: any, token?: string, expiresInSec: number = 3600) => {
+  const normalizedUser = {
+    displayName: user?.displayName || user?.name || 'Google User',
+    name: user?.displayName || user?.name || 'Google User',
+    email: user?.email || '',
+    imageUrl: user?.imageUrl || null,
+    connectedAt: new Date().toISOString(),
+  };
+
+  const expiresAt = Date.now() + expiresInSec * 1000;
   if (token) {
-    localStorage.setItem('courseLibraryToken', token);
-    // Typical Google access token lasts 3600 seconds (1 hour). We store expiry timestamp.
-    localStorage.setItem('courseLibraryTokenExpiry', String(Date.now() + 3600 * 1000));
+    memorySession = { token, expiresAt, user: normalizedUser };
+  } else if (memorySession) {
+    memorySession.user = normalizedUser;
+  }
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('courseLibraryUser', JSON.stringify(normalizedUser));
+    if (token) {
+      localStorage.setItem('courseLibraryToken', token);
+      localStorage.setItem('courseLibraryTokenExpiry', String(expiresAt));
+    }
   }
 };
 
 export const disconnectCourseLibrary = async () => {
+  memorySession = null;
   if (typeof window === 'undefined') return;
   localStorage.removeItem('courseLibraryUser');
   clearCourseLibraryToken();
+};
+
+// Get a valid access token for Course Library (drive.readonly)
+export const getCourseLibraryAccessToken = async (forcePrompt = false) => {
+  try {
+    // 1. Fast path: If not explicitly forcing prompt, check valid active token
+    if (!forcePrompt) {
+      const cachedToken = getCachedCourseLibraryToken();
+      if (cachedToken) {
+        return { token: cachedToken, user: getCourseLibraryUser() };
+      }
+    } else {
+      clearCourseLibraryToken();
+    }
+
+    const savedUser = getCourseLibraryUser();
+
+    // 2. Silent token retrieval path: On native Android, if we have an existing authorized account,
+    // silently retrieve/refresh an access token from Google Play Services WITHOUT launching CredentialManager UI
+    if (!forcePrompt && Capacitor.isNativePlatform() && savedUser?.email) {
+      console.log('[driveSync] Attempting silent token retrieval for authorized account:', savedUser.email);
+      try {
+        const silent = await NativeLecturePlayer.getSilentAccessToken({
+          email: savedUser.email,
+          clientId: GOOGLE_WEB_CLIENT_ID,
+          scopes: [SCOPE_COURSE_LIBRARY]
+        });
+
+        if (silent && !silent.hasResolution && silent.accessToken) {
+          console.log('[driveSync] Silent token retrieval succeeded! Token acquired without account chooser.');
+          saveCourseLibraryUser(savedUser, silent.accessToken);
+          return { token: silent.accessToken, user: savedUser };
+        } else {
+          console.log('[driveSync] Silent token retrieval indicated resolution required or failed:', silent);
+        }
+      } catch (silentErr) {
+        console.warn('[driveSync] Silent token retrieval exception:', silentErr);
+      }
+    }
+
+    // 3. Interactive sign-in path: ONLY when forcePrompt is true, or silent retrieval genuinely requires user resolution
+    console.log('[driveSync] Acquiring Course Library access token via interactive GoogleSignIn.signIn()...');
+    await initGoogleScope(SCOPE_COURSE_LIBRARY);
+    const result = await GoogleSignIn.signIn();
+
+    if (!result.accessToken) {
+      throw new Error("No access token returned from Google Sign-In for Course Library");
+    }
+
+    saveCourseLibraryUser(result, result.accessToken);
+    return { token: result.accessToken, user: result };
+  } catch (err: any) {
+    throw logAuthError('Course Library', err);
+  }
 };
 
 // Check if a backup exists in appDataFolder

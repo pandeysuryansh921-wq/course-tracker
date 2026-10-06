@@ -31,6 +31,7 @@ interface VideoCacheState {
   enforceCacheCap: (incomingBytes?: number) => Promise<void>;
   runAutoPurgeSweep: () => Promise<number>;
   getTotalStorageBytes: () => number;
+  setPlaybackSpeed: (speed: number) => void;
 }
 
 const DEFAULT_SETTINGS: VideoCacheSettings = {
@@ -40,7 +41,8 @@ const DEFAULT_SETTINGS: VideoCacheSettings = {
   wifiOnly: false,
   allowMobileData: true,
   requireChargingOnly: false,
-  autoPurgeEnabled: true
+  autoPurgeEnabled: true,
+  playbackSpeed: 1.0
 };
 
 export const useVideoCacheStore = create<VideoCacheState>()(
@@ -50,6 +52,13 @@ export const useVideoCacheStore = create<VideoCacheState>()(
       videoNotes: {},
       settings: DEFAULT_SETTINGS,
       activeTopicId: null,
+
+      setPlaybackSpeed: (speed: number) => {
+        if (!speed || speed <= 0) return;
+        set((state) => ({
+          settings: { ...state.settings, playbackSpeed: speed }
+        }));
+      },
 
       updateSettings: (partial) => {
         set((state) => ({

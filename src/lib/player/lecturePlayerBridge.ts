@@ -12,6 +12,7 @@ export interface PlayLectureOptions {
   currentTime?: number;
   duration?: number;
   isOffline?: boolean;
+  playbackSpeed?: number;
   nextTopic?: {
     topicId: string;
     title: string;
@@ -26,6 +27,7 @@ export interface PlayLectureResult {
   duration?: number;
   isCompleted?: boolean;
   watchedPercentage?: number;
+  playbackSpeed?: number;
   notesAdded?: VideoNote[];
   nextRequested?: boolean;
   nextTopicId?: string;
@@ -39,9 +41,24 @@ export interface PlayLectureResult {
   errorDetails?: string;
 }
 
+export interface SilentAuthOptions {
+  email?: string;
+  clientId?: string;
+  scopes?: string[];
+}
+
+export interface SilentAuthResult {
+  hasResolution: boolean;
+  accessToken: string | null;
+  error?: string;
+}
+
 export interface NativeLecturePlayerPlugin {
   isNativePlayerAvailable(): Promise<{ available: boolean }>;
   playLecture(options: PlayLectureOptions): Promise<PlayLectureResult>;
+  getSilentAccessToken(options: SilentAuthOptions): Promise<SilentAuthResult>;
+  getPlayerPreferences(): Promise<{ playbackSpeed: number }>;
+  setPlayerPreferences(options: { playbackSpeed: number }): Promise<{ success: boolean }>;
 }
 
 export const NativeLecturePlayer = registerPlugin<NativeLecturePlayerPlugin>('LecturePlayer');

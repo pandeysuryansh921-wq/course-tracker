@@ -1,9 +1,10 @@
 package com.degreetrack.quiz.player;
 
+import android.accounts.Account;
 import android.app.Activity;
-import java.util.ArrayList;
-import java.util.Arrays;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import androidx.activity.result.ActivityResult;
@@ -16,9 +17,20 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.common.api.Scope;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 @CapacitorPlugin(name = "LecturePlayer")
 public class LecturePlayerPlugin extends Plugin {
     private static final String TAG = "DegreeTrackPlayer";
+    private static final String PREFS_NAME = "degreetrack_player_prefs";
+    private static final String KEY_PLAYBACK_SPEED = "playback_speed";
 
     @Override
     public void load() {
@@ -45,6 +57,7 @@ public class LecturePlayerPlugin extends Plugin {
         Double currentTime = call.getDouble("currentTime", 0.0);
         Double duration = call.getDouble("duration", 0.0);
         Boolean isOffline = call.getBoolean("isOffline", false);
+        Double playbackSpeed = call.getDouble("playbackSpeed", 0.0);
 
         JSObject nextTopic = call.getObject("nextTopic");
 
@@ -58,7 +71,8 @@ public class LecturePlayerPlugin extends Plugin {
                 ", isOffline=" + isOffline +
                 ", hasToken=" + (tokenLength > 0) +
                 ", tokenLength=" + tokenLength +
-                ", currentTime=" + currentTime);
+                ", currentTime=" + currentTime +
+                ", playbackSpeed=" + playbackSpeed);
 
         Intent intent = new Intent(getContext(), LecturePlayerActivity.class);
         intent.putStringArrayListExtra("nativeTrace", new ArrayList<>(Arrays.asList("08", "09")));
@@ -71,6 +85,9 @@ public class LecturePlayerPlugin extends Plugin {
         intent.putExtra("currentTime", currentTime != null ? currentTime : 0.0);
         intent.putExtra("duration", duration != null ? duration : 0.0);
         intent.putExtra("isOffline", isOffline != null ? isOffline : false);
+        if (playbackSpeed != null && playbackSpeed > 0.1) {
+            intent.putExtra("playbackSpeed", playbackSpeed);
+        }
 
         if (nextTopic != null) {
             intent.putExtra("nextTopicId", nextTopic.getString("topicId"));
@@ -147,6 +164,9 @@ public class LecturePlayerPlugin extends Plugin {
                 ret.put("nextRequested", nextReq);
                 ret.put("nextTopicId", nextTopId);
 
+                double returnedSpeed = data.getDoubleExtra("playbackSpeed", 1.0);
+                ret.put("playbackSpeed", returnedSpeed);
+
                 String notesJsonStr = data.getStringExtra("notesAddedJson");
                 if (notesJsonStr != null && !notesJsonStr.isEmpty()) {
                     try {
@@ -168,6 +188,98 @@ public class LecturePlayerPlugin extends Plugin {
             ret.put("hasError", false);
         }
 
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getSilentAccessToken(PluginCall call) {
+        String email = call.getString("email");
+        String clientId = call.getString("clientId");
+        JSArray scopesArray = call.getArray("scopes");
+
+        List<Scope> scopeList = new ArrayList<>();
+        if (scopesArray != null) {
+            for (int i = 0; i < scopesArray.length(); i++) {
+                try {
+                    scopeList.add(new Scope(scopesArray.getString(i)));
+                } catch (Exception ignored) {}
+            }
+        }
+        if (scopeList.isEmpty()) {
+            scopeList.add(new Scope("https://www.googleapis.com/auth/drive.readonly"));
+        }
+
+        AuthorizationRequest.Builder builder = AuthorizationRequest.builder()
+                .setRequestedScopes(scopeList);
+
+        if (clientId != null && !clientId.isEmpty()) {
+            builder.requestOfflineAccess(clientId);
+        }
+        if (email != null && !email.trim().isEmpty()) {
+            builder.setAccount(new Account(email.trim(), "com.google"));
+        }
+
+        AuthorizationRequest authRequest = builder.build();
+
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("Activity unavailable for silent authorization");
+            return;
+        }
+
+        try {
+            Identity.getAuthorizationClient(activity)
+                    .authorize(authRequest)
+                    .addOnSuccessListener(authResult -> {
+                        JSObject ret = new JSObject();
+                        if (authResult.hasResolution()) {
+                            Log.i(TAG, "[Auth] Silent authorization requires resolution for " + email);
+                            ret.put("hasResolution", true);
+                            ret.put("accessToken", null);
+                        } else {
+                            String token = authResult.getAccessToken();
+                            Log.i(TAG, "[Auth] Silent authorization succeeded for " + email + ", token acquired (len: " + (token != null ? token.length() : 0) + ")");
+                            ret.put("hasResolution", false);
+                            ret.put("accessToken", token);
+                        }
+                        call.resolve(ret);
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.w(TAG, "[Auth] Silent authorization failed for " + email + ": " + e.getMessage());
+                        JSObject ret = new JSObject();
+                        ret.put("hasResolution", false);
+                        ret.put("accessToken", null);
+                        ret.put("error", e.getMessage());
+                        call.resolve(ret);
+                    });
+        } catch (Exception e) {
+            Log.e(TAG, "[Auth] Silent authorization exception: " + e.getMessage(), e);
+            JSObject ret = new JSObject();
+            ret.put("hasResolution", false);
+            ret.put("accessToken", null);
+            ret.put("error", e.getMessage());
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void getPlayerPreferences(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        float speed = prefs.getFloat(KEY_PLAYBACK_SPEED, 1.0f);
+        JSObject ret = new JSObject();
+        ret.put("playbackSpeed", (double) speed);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void setPlayerPreferences(PluginCall call) {
+        Double speed = call.getDouble("playbackSpeed");
+        if (speed != null && speed > 0.1) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().putFloat(KEY_PLAYBACK_SPEED, speed.floatValue()).apply();
+        }
+        JSObject ret = new JSObject();
+        ret.put("success", true);
         call.resolve(ret);
     }
 }

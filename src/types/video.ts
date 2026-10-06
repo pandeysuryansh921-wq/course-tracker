@@ -118,4 +118,9 @@ export interface VideoCacheSettings {
   allowMobileData: boolean; // default false
   requireChargingOnly: boolean; // default false
   autoPurgeEnabled: boolean; // default true
+  playbackSpeed: number; // Global persistent player speed preference (default 1.0)
+}
+
+export interface PlayerPreferences {
+  playbackSpeed: number;
 }

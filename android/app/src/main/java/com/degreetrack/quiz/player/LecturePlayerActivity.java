@@ -5,6 +5,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
@@ -118,6 +119,8 @@ public class LecturePlayerActivity extends AppCompatActivity {
     // State
     private boolean isUserSeeking = false;
     private float currentSpeed = 1.0f;
+    private static final String PREFS_NAME = "degreetrack_player_prefs";
+    private static final String KEY_PLAYBACK_SPEED = "playback_speed";
     private int maxWatchedPct = 0;
     private boolean isCompleted = false;
     private final JSONArray notesAdded = new JSONArray();
@@ -216,6 +219,15 @@ public class LecturePlayerActivity extends AppCompatActivity {
         nextVideoUrl = intent.getStringExtra("nextVideoUrl");
         nextFileId = intent.getStringExtra("nextFileId");
 
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        float savedSpeed = prefs.getFloat(KEY_PLAYBACK_SPEED, 1.0f);
+        double passedSpeed = intent.getDoubleExtra("playbackSpeed", 0.0);
+        if (passedSpeed > 0.1) {
+            currentSpeed = (float) passedSpeed;
+        } else {
+            currentSpeed = savedSpeed;
+        }
+
         int tokenLength = (accessToken != null) ? accessToken.trim().length() : 0;
 
         Log.i(TAG, "[PLAYER_TRACE_10] Intent data parsed: " +
@@ -227,6 +239,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
                 ", isOffline=" + isOffline +
                 ", hasToken=" + (tokenLength > 0) +
                 ", tokenLength=" + tokenLength +
+                ", playbackSpeed=" + currentSpeed +
                 ", videoUrl=" + videoUrl);
     }
 
@@ -328,6 +341,8 @@ public class LecturePlayerActivity extends AppCompatActivity {
         if (player != null) {
             player.setPlaybackParameters(new PlaybackParameters(speed));
         }
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putFloat(KEY_PLAYBACK_SPEED, speed).apply();
     }
 
     private void setupListeners() {
@@ -846,6 +861,7 @@ public class LecturePlayerActivity extends AppCompatActivity {
         resultIntent.putExtra("isCompleted", isCompleted);
         resultIntent.putExtra("watchedPercentage", maxWatchedPct);
         resultIntent.putExtra("notesAddedJson", notesAdded.toString());
+        resultIntent.putExtra("playbackSpeed", (double) currentSpeed);
         resultIntent.putExtra("nextRequested", nextRequested);
         if (nextRequested && nextTopicId != null) {
             resultIntent.putExtra("nextTopicId", nextTopicId);
